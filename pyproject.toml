@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "konfig"
+name = "cognisn-konfig"
 dynamic = ["version"]
 description = "Settings management, pluggable secrets, and run-scoped logging for Python applications."
 readme = "README.md"
