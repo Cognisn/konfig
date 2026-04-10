@@ -38,7 +38,7 @@ class TestCreateRunDirectory:
         assert latest.resolve() == run_dir.resolve()
 
     def test_latest_symlink_updated(self, tmp_path: Path) -> None:
-        run1 = create_run_directory(tmp_path)
+        create_run_directory(tmp_path)
         time.sleep(1.1)
         run2 = create_run_directory(tmp_path)
         latest = tmp_path / "latest"

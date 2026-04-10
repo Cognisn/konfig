@@ -1,5 +1,14 @@
 # Konfig
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Cognisn_konfig&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Cognisn_konfig)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Cognisn_konfig&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=Cognisn_konfig)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Cognisn_konfig&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=Cognisn_konfig)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=Cognisn_konfig&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=Cognisn_konfig)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=Cognisn_konfig&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=Cognisn_konfig)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=Cognisn_konfig&metric=bugs)](https://sonarcloud.io/summary/new_code?id=Cognisn_konfig)
+[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=Cognisn_konfig&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=Cognisn_konfig)
+[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=Cognisn_konfig&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=Cognisn_konfig)
+
 Settings management, pluggable secrets, and run-scoped logging for Python applications.
 
 Konfig provides three foundational capabilities every Python application needs, with an optional lightweight app lifecycle context manager that ties them together. It is a clean-sheet replacement for `dtPyAppFramework`.

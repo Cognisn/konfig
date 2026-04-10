@@ -36,7 +36,7 @@ except ZeroDivisionError:
 
 # Check where logs went
 print(f"\nLogs written to: {manager.run_dir}")
-print(f"Log file contents:")
+print("Log file contents:")
 log_file = manager.run_dir / "app.log"
 print(log_file.read_text())
 
