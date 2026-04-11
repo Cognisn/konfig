@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -11,13 +12,13 @@ from konfig.settings.settings import Settings
 
 
 @pytest.fixture(autouse=True)
-def _clean_root_logger() -> None:
+def _clean_root_logger() -> Generator[None, None, None]:
     """Remove all handlers from root logger before and after each test."""
     root = logging.getLogger()
     for handler in root.handlers[:]:
         handler.close()
         root.removeHandler(handler)
-    yield  # type: ignore[misc]
+    yield
     for handler in root.handlers[:]:
         handler.close()
         root.removeHandler(handler)

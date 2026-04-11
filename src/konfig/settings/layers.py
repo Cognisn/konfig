@@ -126,7 +126,7 @@ class FileLayer:
         try:
             if self._path.exists():
                 self._data = parse_file(self._path)
-        except (OSError, PermissionError) as exc:
+        except OSError as exc:
             if self._graceful:
                 logger.debug("Could not read config file %s: %s", self._path, exc)
                 self._data = {}

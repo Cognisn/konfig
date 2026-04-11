@@ -11,6 +11,9 @@ from konfig.secrets.secrets import Secrets
 from konfig.settings.settings import Settings
 
 
+_NOT_INITIALISED_MSG = "AppContext is not initialised. Use it as a context manager."
+
+
 class AppContext:
     """Lifecycle context manager that wires together Settings, Secrets, and Logging.
 
@@ -102,36 +105,35 @@ class AppContext:
         self._teardown()
 
     async def __aenter__(self) -> AppContext:
-        self._setup()
-        return self
+        return self.__enter__()
 
     async def __aexit__(self, *exc: Any) -> None:
-        self._teardown()
+        self.__exit__(*exc)
 
     @property
     def settings(self) -> Settings:
         """The Settings instance."""
         if self._settings is None:
-            raise RuntimeError("AppContext is not initialised. Use it as a context manager.")
+            raise RuntimeError(_NOT_INITIALISED_MSG)
         return self._settings
 
     @property
     def secrets(self) -> Secrets:
         """The Secrets instance."""
         if self._secrets is None:
-            raise RuntimeError("AppContext is not initialised. Use it as a context manager.")
+            raise RuntimeError(_NOT_INITIALISED_MSG)
         return self._secrets
 
     @property
     def logger(self) -> logging.Logger:
         """The root logger."""
         if self._logger is None:
-            raise RuntimeError("AppContext is not initialised. Use it as a context manager.")
+            raise RuntimeError(_NOT_INITIALISED_MSG)
         return self._logger
 
     @property
     def log_manager(self) -> LogManager:
         """The LogManager instance."""
         if self._log_manager is None:
-            raise RuntimeError("AppContext is not initialised. Use it as a context manager.")
+            raise RuntimeError(_NOT_INITIALISED_MSG)
         return self._log_manager

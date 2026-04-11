@@ -1,13 +1,17 @@
 """Secrets usage — storing and retrieving secrets with the encrypted file backend."""
 
+import tempfile
 from pathlib import Path
 from konfig import Secrets, Settings
+
+# Use a secure temporary directory for the sample
+_sample_dir = Path(tempfile.mkdtemp(prefix="konfig_sample_"))
 
 # Configure to use the encrypted file backend with a known path
 settings = Settings(defaults={
     "secrets": {
         "backend": "encrypted_file",
-        "file_path": "/tmp/konfig_sample_secrets.enc",
+        "file_path": str(_sample_dir / "secrets.enc"),
         "master_key": "sample-master-key-do-not-use-in-production",
     }
 })
@@ -43,7 +47,7 @@ secrets.delete("db_password")
 print(f"After delete, has db_password: {secrets.has('db_password')}")
 
 # Clean up
-Path("/tmp/konfig_sample_secrets.enc").unlink(missing_ok=True)
-Path("/tmp/konfig_sample_secrets.key").unlink(missing_ok=True)
+import shutil
+shutil.rmtree(_sample_dir, ignore_errors=True)
 
 print("\nSecrets are encrypted at rest using AES-256.")
