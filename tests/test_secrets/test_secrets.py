@@ -80,15 +80,13 @@ class TestSecretURIResolution:
 
 
 class TestSecretsAutoDetection:
-    def test_explicit_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("KONFIG_AWS_SECRETS_MANAGER", raising=False)
+    def test_explicit_backend(self) -> None:
         backend = InMemoryBackend()
         secrets = Secrets(backend=backend)
         assert secrets._backend is backend
 
     def test_encrypted_file_fallback(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("KONFIG_MASTER_KEY", raising=False)
-        monkeypatch.delenv("KONFIG_AWS_SECRETS_MANAGER", raising=False)
         settings = Settings(defaults={
             "secrets": {
                 "backend": "encrypted_file",

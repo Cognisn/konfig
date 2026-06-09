@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
-from typing import Callable
+from typing import Any, Callable
 
 from konfig.secrets.backend import SecretBackend
+
+logger = logging.getLogger(__name__)
 
 _NOT_JSON_OBJECT = "Designated AWS secret is not a JSON object."
 _NO_SECRET_STRING = (
@@ -61,7 +64,7 @@ class AWSSecretsBundleBackend(SecretBackend):
     def region(self) -> str:
         return self._region
 
-    def _create_client(self):
+    def _create_client(self) -> Any:
         try:
             import boto3
         except ImportError as exc:
@@ -73,6 +76,7 @@ class AWSSecretsBundleBackend(SecretBackend):
 
     def _fetch(self) -> dict[str, str]:
         """Fetch and parse the bundle directly from AWS (no cache)."""
+        logger.debug("Fetching AWS bundle secret %s", self._arn)
         try:
             response = self._client.get_secret_value(SecretId=self._arn)
         except self._client.exceptions.ResourceNotFoundException:
