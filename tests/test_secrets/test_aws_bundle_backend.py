@@ -181,3 +181,19 @@ class TestWritePath:
         client._secret_string = json.dumps({"a": "1", "external": "x"})
         backend.set("b", "2")
         assert json.loads(client.put_calls[-1]) == {"a": "1", "external": "x", "b": "2"}
+
+
+class TestBotoImport:
+    def test_missing_boto3_raises_helpful_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import builtins
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "boto3":
+                raise ImportError("no boto3")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        with pytest.raises(ImportError, match=r"pip install konfig\[aws\]"):
+            AWSSecretsBundleBackend(ARN)  # no client injected -> tries boto3

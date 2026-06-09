@@ -61,7 +61,7 @@ class AWSSecretsBundleBackend(SecretBackend):
     def region(self) -> str:
         return self._region
 
-    def _create_client(self):  # pragma: no cover - exercised in Task 6
+    def _create_client(self):
         try:
             import boto3
         except ImportError as exc:
