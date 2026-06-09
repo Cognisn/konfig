@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 
@@ -14,34 +14,79 @@ else:
     import tomli as tomllib
 
 
-def parse_file(path: Path) -> dict[str, Any]:
-    """Parse a config file, auto-detecting format from file extension.
+ALLOWED_FORMAT_OVERRIDES = ("yaml", "json", "sqlite")
 
-    Supported extensions: .yaml, .yml, .toml, .json
+_EXTENSION_FORMATS = {
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".json": "json",
+    ".toml": "toml",
+    ".db": "sqlite",
+    ".sqlite": "sqlite",
+    ".sqlite3": "sqlite",
+}
 
-    Args:
-        path: Path to the config file.
 
-    Returns:
-        Parsed configuration as a nested dict.
+def _format_from_extension(path: Path) -> Optional[str]:
+    """Map a file extension to a format, or None if unrecognised."""
+    return _EXTENSION_FORMATS.get(Path(path).suffix.lower())
+
+
+def resolve_format(path: Optional[Path], override: Optional[str]) -> str:
+    """Resolve the active config format.
+
+    Precedence: explicit ``override`` (from ``KONFIG_CONFIG_FORMAT``) ->
+    file extension -> ``"yaml"``.
+
+    Raises:
+        ValueError: If ``override`` is set but not one of yaml/json/sqlite.
+    """
+    if override:
+        fmt = override.strip().lower()
+        if fmt not in ALLOWED_FORMAT_OVERRIDES:
+            raise ValueError(
+                f"Invalid KONFIG_CONFIG_FORMAT {override!r}; "
+                f"allowed values: {', '.join(ALLOWED_FORMAT_OVERRIDES)}"
+            )
+        return fmt
+    if path is not None:
+        fmt = _format_from_extension(path)
+        if fmt is not None:
+            return fmt
+    return "yaml"
+
+
+def parse_file(path: Path, fmt: Optional[str] = None) -> dict[str, Any]:
+    """Parse a config file. If ``fmt`` is given it is used; otherwise the
+    format is detected from the file extension.
+
+    Supported formats: yaml, toml, json, sqlite.
 
     Raises:
         FileNotFoundError: If the file does not exist.
-        ValueError: If the file extension is not supported.
+        ValueError: If the format cannot be determined or is unsupported.
     """
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
 
-    suffix = path.suffix.lower()
-    if suffix in (".yaml", ".yml"):
+    if fmt is None:
+        fmt = _format_from_extension(path)
+        if fmt is None:
+            raise ValueError(f"Unsupported config file format: {path.suffix}")
+
+    if fmt == "yaml":
         return _parse_yaml(path)
-    elif suffix == ".toml":
+    elif fmt == "toml":
         return _parse_toml(path)
-    elif suffix == ".json":
+    elif fmt == "json":
         return _parse_json(path)
+    elif fmt == "sqlite":
+        from konfig.settings.sqlite_store import read_sqlite
+
+        return read_sqlite(path)
     else:
-        raise ValueError(f"Unsupported config file format: {suffix}")
+        raise ValueError(f"Unsupported config file format: {fmt}")
 
 
 def _parse_yaml(path: Path) -> dict[str, Any]:
@@ -63,36 +108,38 @@ def _parse_json(path: Path) -> dict[str, Any]:
     return data
 
 
-def write_file(path: Path, data: dict[str, Any]) -> None:
-    """Write a config dict to file, auto-detecting format from extension.
+def write_file(path: Path, data: dict[str, Any], fmt: Optional[str] = None) -> None:
+    """Write a config dict to file. If ``fmt`` is given it is used; otherwise
+    the format is detected from the file extension.
 
-    Supported extensions: .yaml, .yml, .json
-
-    TOML writing is not supported (no stdlib writer in Python <3.11 and
-    ``tomli`` is read-only). Use YAML or JSON for writable config files.
-
-    Args:
-        path: Path to the config file.
-        data: Configuration dict to write.
+    Writable formats: yaml, json, sqlite. TOML writing is not supported.
 
     Raises:
-        ValueError: If the file extension is not supported for writing.
+        ValueError: If the format cannot be determined or is unsupported for writing.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    suffix = path.suffix.lower()
-    if suffix in (".yaml", ".yml"):
+    if fmt is None:
+        fmt = _format_from_extension(path)
+        if fmt is None:
+            raise ValueError(f"Unsupported config file format for writing: {path.suffix}")
+
+    if fmt in ("yaml", "yml"):
         _write_yaml(path, data)
-    elif suffix == ".json":
+    elif fmt == "json":
         _write_json(path, data)
-    elif suffix == ".toml":
+    elif fmt == "sqlite":
+        from konfig.settings.sqlite_store import write_sqlite
+
+        write_sqlite(path, data)
+    elif fmt == "toml":
         raise ValueError(
             "Writing TOML config files is not supported. "
-            "Use YAML or JSON for writable config files."
+            "Use YAML, JSON, or SQLite for writable config files."
         )
     else:
-        raise ValueError(f"Unsupported config file format for writing: {suffix}")
+        raise ValueError(f"Unsupported config file format for writing: {fmt}")
 
 
 def _write_yaml(path: Path, data: dict[str, Any]) -> None:
