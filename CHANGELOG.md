@@ -16,6 +16,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - TTL read cache for the bundle backend (default 300s, configurable via `secrets.aws.cache_ttl`)
   with write-through and re-fetch-before-write to narrow the lost-update window.
 
+### Tests
+
+- Opt-in LocalStack integration test for the AWS Secrets Manager bundle backend
+  (`pytest -m localstack`), with a `docker-compose.yml` for local provisioning.
+
 ## [0.1.1] - 2026-04-11
 
 ### Fixed
