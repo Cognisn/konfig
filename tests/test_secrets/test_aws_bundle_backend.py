@@ -114,3 +114,30 @@ class TestTtlCache:
         backend.refresh()
         backend.get("a")
         assert client.get_calls == 2
+
+
+class TestErrorHandling:
+    def test_missing_secret_reads_as_empty(self) -> None:
+        client = FakeSMClient(missing=True)
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        assert backend.get("a") is None
+        assert backend.list_keys() == []
+        assert backend.has("a") is False
+
+    def test_non_json_secret_raises(self) -> None:
+        client = FakeSMClient("this-is-not-json")
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        with pytest.raises(ValueError, match="not a JSON object"):
+            backend.get("a")
+
+    def test_json_array_not_object_raises(self) -> None:
+        client = FakeSMClient(json.dumps(["a", "b"]))
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        with pytest.raises(ValueError, match="not a JSON object"):
+            backend.get("a")
+
+    def test_binary_secret_raises(self) -> None:
+        client = FakeSMClient(secret_string=None)  # SecretString is None
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        with pytest.raises(ValueError, match="no SecretString"):
+            backend.get("a")
