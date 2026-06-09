@@ -71,8 +71,33 @@ class AWSSecretsBundleBackend(SecretBackend):
             ) from exc
         return boto3.client("secretsmanager", region_name=self._region)
 
+    def _fetch(self) -> dict[str, str]:
+        """Fetch and parse the bundle directly from AWS (no cache)."""
+        try:
+            response = self._client.get_secret_value(SecretId=self._arn)
+        except self._client.exceptions.ResourceNotFoundException:
+            return {}
+        raw = response.get("SecretString")
+        if raw is None:
+            raise ValueError(_NO_SECRET_STRING)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(_NOT_JSON_OBJECT) from exc
+        if not isinstance(data, dict):
+            raise ValueError(_NOT_JSON_OBJECT)
+        return data
+
+    def _bundle(self) -> dict[str, str]:
+        """Return the cached bundle, refreshing if the TTL has expired."""
+        now = self._time()
+        if self._cache is None or (now - self._cache_at) >= self._ttl:
+            self._cache = self._fetch()
+            self._cache_at = now
+        return self._cache
+
     def get(self, key: str) -> str | None:
-        raise NotImplementedError
+        return self._bundle().get(key)
 
     def set(self, key: str, value: str) -> None:
         raise NotImplementedError
@@ -81,7 +106,7 @@ class AWSSecretsBundleBackend(SecretBackend):
         raise NotImplementedError
 
     def has(self, key: str) -> bool:
-        raise NotImplementedError
+        return key in self._bundle()
 
     def list_keys(self) -> list[str]:
-        raise NotImplementedError
+        return list(self._bundle().keys())

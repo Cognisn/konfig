@@ -63,3 +63,26 @@ class TestArnParsing:
         bad = "arn:aws:secretsmanager::123456789012:secret:x-AbCdEf"
         with pytest.raises(ValueError):
             AWSSecretsBundleBackend(bad, client=FakeSMClient("{}"))
+
+
+class TestReadPath:
+    def test_get_returns_value(self) -> None:
+        client = FakeSMClient(json.dumps({"api_key": "sk-123"}))
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        assert backend.get("api_key") == "sk-123"
+
+    def test_get_missing_key_returns_none(self) -> None:
+        client = FakeSMClient(json.dumps({"api_key": "sk-123"}))
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        assert backend.get("nope") is None
+
+    def test_has(self) -> None:
+        client = FakeSMClient(json.dumps({"a": "1"}))
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        assert backend.has("a") is True
+        assert backend.has("b") is False
+
+    def test_list_keys(self) -> None:
+        client = FakeSMClient(json.dumps({"a": "1", "b": "2"}))
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        assert sorted(backend.list_keys()) == ["a", "b"]
