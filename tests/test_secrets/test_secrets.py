@@ -134,3 +134,28 @@ class TestEnvVarBundleSelection:
         backend = InMemoryBackend()
         secrets = Secrets(backend=backend)
         assert secrets._backend is backend
+
+    def test_cache_ttl_read_from_settings(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv(
+            "KONFIG_AWS_SECRETS_MANAGER",
+            "arn:aws:secretsmanager:eu-west-1:123456789012:secret:app/s-AbCdEf",
+        )
+        from konfig.secrets.aws_bundle_backend import AWSSecretsBundleBackend
+
+        captured: dict[str, object] = {}
+
+        def fake_init(self, arn, ttl=300, client=None, time_func=None):
+            captured["ttl"] = ttl
+            self._cache = {}
+            self._cache_at = 0.0
+
+        monkeypatch.setattr(AWSSecretsBundleBackend, "__init__", fake_init)
+
+        config = tmp_path / "config.yaml"
+        config.write_text("secrets:\n  aws:\n    cache_ttl: 60\n", encoding="utf-8")
+        settings = Settings(config_file=str(config))
+
+        Secrets(settings=settings)
+        assert captured["ttl"] == 60
