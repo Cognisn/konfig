@@ -110,12 +110,21 @@ class FileLayer:
         path: Path to the config file. If None, the layer is empty.
         graceful: If True, silently ignore read errors (e.g. permission
             denied). Useful for system-wide config that may be unreadable.
+        fmt: Explicit config format ("yaml"/"json"/"toml"/"sqlite"). If None,
+            the format is detected from the file extension.
     """
 
-    def __init__(self, path: Optional[Path] = None, *, graceful: bool = False) -> None:
+    def __init__(
+        self,
+        path: Optional[Path] = None,
+        *,
+        graceful: bool = False,
+        fmt: Optional[str] = None,
+    ) -> None:
         self._path = Path(path) if path else None
         self._data: dict[str, Any] = {}
         self._graceful = graceful
+        self._fmt = fmt
         if self._path:
             self.reload()
 
@@ -125,7 +134,7 @@ class FileLayer:
             return
         try:
             if self._path.exists():
-                self._data = parse_file(self._path)
+                self._data = parse_file(self._path, fmt=self._fmt)
         except OSError as exc:
             if self._graceful:
                 logger.debug("Could not read config file %s: %s", self._path, exc)
@@ -166,7 +175,7 @@ class FileLayer:
         """Write current data back to the config file."""
         assert self._path is not None
         try:
-            write_file(self._path, self._data)
+            write_file(self._path, self._data, fmt=self._fmt)
         except OSError as exc:
             raise PermissionError(
                 f"Cannot write to config file {self._path}: {exc}"

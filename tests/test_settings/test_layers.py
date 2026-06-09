@@ -107,3 +107,22 @@ class TestRuntimeLayer:
         layer.set("db.host", "runtimehost")
         layer.set("db.port", 5432)
         assert layer.get_section("db") == {"host": "runtimehost", "port": 5432}
+
+
+class TestFileLayerSqlite:
+    def test_sqlite_set_get_roundtrip(self, tmp_path: Path) -> None:
+        db = tmp_path / "config.sqlite"
+        layer = FileLayer(db, fmt="sqlite")
+        layer.set("database.host", "localhost")
+        assert layer.get("database.host") == "localhost"
+        # A fresh layer reads the persisted value back from the DB.
+        reloaded = FileLayer(db, fmt="sqlite")
+        assert reloaded.get("database.host") == "localhost"
+
+    def test_sqlite_delete_persists(self, tmp_path: Path) -> None:
+        db = tmp_path / "config.sqlite"
+        layer = FileLayer(db, fmt="sqlite")
+        layer.set("a", "1")
+        assert layer.delete("a") is True
+        reloaded = FileLayer(db, fmt="sqlite")
+        assert reloaded.get("a") is _MISSING
