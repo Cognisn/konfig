@@ -1,6 +1,7 @@
 """Settings class — unified layered access to configuration."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, TypeVar
 
@@ -11,6 +12,7 @@ from konfig.settings.layers import (
     RuntimeLayer,
     _MISSING,
 )
+from konfig.settings.parsers import resolve_format
 
 T = TypeVar("T")
 
@@ -51,13 +53,19 @@ class Settings:
         defaults: Optional[dict[str, Any]] = None,
         env_prefix: Optional[str] = None,
     ) -> None:
+        fmt_override = os.environ.get("KONFIG_CONFIG_FORMAT")
+        system_path = Path(system_config_file) if system_config_file else None
+        user_path = Path(config_file) if config_file else None
+
         self._defaults_layer = DefaultsLayer(defaults)
         self._system_file_layer = FileLayer(
-            Path(system_config_file) if system_config_file else None,
+            system_path,
             graceful=True,
+            fmt=resolve_format(system_path, fmt_override),
         )
         self._user_file_layer = FileLayer(
-            Path(config_file) if config_file else None,
+            user_path,
+            fmt=resolve_format(user_path, fmt_override),
         )
         self._env_layer = EnvLayer(env_prefix)
         self._runtime_layer = RuntimeLayer()

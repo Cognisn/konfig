@@ -217,3 +217,54 @@ class TestPersistSettings:
         s = Settings()
         with pytest.raises(RuntimeError, match="no config file"):
             s.set("key", "value", persist="user")
+
+
+class TestConfigFormatSelection:
+    def test_sqlite_via_env_var_full_crud(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("KONFIG_CONFIG_FORMAT", "sqlite")
+        db = tmp_path / "config.sqlite"
+
+        settings = Settings(config_file=str(db))
+        settings.set("database.host", "localhost", persist="user")
+        assert settings.get("database.host") == "localhost"
+
+        # A fresh Settings re-reads the persisted value from the SQLite file.
+        reopened = Settings(config_file=str(db))
+        assert reopened.get("database.host") == "localhost"
+
+        reopened.delete("database.host", persist="user")
+        assert Settings(config_file=str(db)).get("database.host") is None
+
+    def test_env_override_beats_extension(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Path says .yaml, but the env var forces SQLite.
+        monkeypatch.setenv("KONFIG_CONFIG_FORMAT", "sqlite")
+        path = tmp_path / "config.yaml"
+        settings = Settings(config_file=str(path))
+        settings.set("key", "value", persist="user")
+        # Stored as SQLite: a fresh SQLite read finds it.
+        from konfig.settings.sqlite_store import read_sqlite
+
+        assert read_sqlite(path) == {"key": "value"}
+
+    def test_no_env_uses_extension(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("KONFIG_CONFIG_FORMAT", raising=False)
+        path = tmp_path / "config.json"
+        settings = Settings(config_file=str(path))
+        settings.set("key", "value", persist="user")
+        # Stored as JSON because of the extension.
+        import json
+
+        assert json.loads(path.read_text()) == {"key": "value"}
+
+    def test_invalid_format_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("KONFIG_CONFIG_FORMAT", "xml")
+        with pytest.raises(ValueError, match="KONFIG_CONFIG_FORMAT"):
+            Settings(config_file=str(tmp_path / "config.yaml"))
