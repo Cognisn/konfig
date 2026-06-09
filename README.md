@@ -34,6 +34,27 @@ For AWS Secrets Manager support:
 pip install konfig[aws]
 ```
 
+## Secrets
+
+### AWS Secrets Manager (designated secret)
+
+Point konfig at a single AWS secret that holds a JSON bundle of your secrets (the secret must
+already exist):
+
+```bash
+export KONFIG_AWS_SECRETS_MANAGER=arn:aws:secretsmanager:eu-west-1:123456789012:secret:myapp/secrets-AbCdEf
+```
+
+```python
+from konfig import Secrets
+
+secrets = Secrets()               # env var selects the AWS bundle backend
+api_key = secrets.get("api_key")
+secrets.set("api_key", "sk-new")  # read-modify-write back to the bundle
+```
+
+Requires `pip install konfig[aws]`.
+
 ## Quick Start
 
 ```python
