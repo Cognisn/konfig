@@ -55,6 +55,19 @@ secrets.set("api_key", "sk-new")  # read-modify-write back to the bundle
 
 Requires `pip install konfig[aws]`.
 
+### Running the LocalStack integration test
+
+The AWS bundle backend has an opt-in integration test that runs against a local
+[LocalStack](https://www.localstack.cloud/) container (no AWS account needed). It
+auto-skips when LocalStack is not running, so it never affects the normal test run.
+
+```bash
+docker compose up -d         # start LocalStack
+pip install -e ".[dev,aws]"  # boto3 + dev tools
+pytest -m localstack         # run only the integration test
+docker compose down          # stop LocalStack
+```
+
 ## Quick Start
 
 ```python

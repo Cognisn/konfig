@@ -51,6 +51,9 @@ packages = ["src/konfig"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "localstack: integration tests requiring a running LocalStack container (auto-skipped if unavailable)",
+]
 
 [tool.mypy]
 python_version = "3.10"
