@@ -96,6 +96,10 @@ class AWSSecretsBundleBackend(SecretBackend):
             self._cache_at = now
         return self._cache
 
+    def refresh(self) -> None:
+        """Force the next read to re-fetch the bundle from AWS."""
+        self._cache = None
+
     def get(self, key: str) -> str | None:
         return self._bundle().get(key)
 

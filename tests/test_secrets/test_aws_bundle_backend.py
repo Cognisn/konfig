@@ -86,3 +86,31 @@ class TestReadPath:
         client = FakeSMClient(json.dumps({"a": "1", "b": "2"}))
         backend = AWSSecretsBundleBackend(ARN, client=client)
         assert sorted(backend.list_keys()) == ["a", "b"]
+
+
+class TestTtlCache:
+    def test_reads_within_ttl_hit_cache(self) -> None:
+        clock = Clock()
+        client = FakeSMClient(json.dumps({"a": "1"}))
+        backend = AWSSecretsBundleBackend(ARN, ttl=300, client=client, time_func=clock)
+        backend.get("a")
+        backend.get("a")
+        assert client.get_calls == 1  # second read served from cache
+
+    def test_read_after_ttl_refetches(self) -> None:
+        clock = Clock()
+        client = FakeSMClient(json.dumps({"a": "1"}))
+        backend = AWSSecretsBundleBackend(ARN, ttl=300, client=client, time_func=clock)
+        backend.get("a")
+        clock.advance(301)
+        backend.get("a")
+        assert client.get_calls == 2
+
+    def test_refresh_forces_refetch(self) -> None:
+        clock = Clock()
+        client = FakeSMClient(json.dumps({"a": "1"}))
+        backend = AWSSecretsBundleBackend(ARN, ttl=300, client=client, time_func=clock)
+        backend.get("a")
+        backend.refresh()
+        backend.get("a")
+        assert client.get_calls == 2
