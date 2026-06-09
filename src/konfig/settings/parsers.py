@@ -14,6 +14,8 @@ else:
     import tomli as tomllib
 
 
+# TOML is intentionally NOT overridable via KONFIG_CONFIG_FORMAT: it is read-only,
+# so it is reachable only by file extension, never forced as a writable format.
 ALLOWED_FORMAT_OVERRIDES = ("yaml", "json", "sqlite")
 
 _EXTENSION_FORMATS = {
@@ -125,7 +127,7 @@ def write_file(path: Path, data: dict[str, Any], fmt: Optional[str] = None) -> N
         if fmt is None:
             raise ValueError(f"Unsupported config file format for writing: {path.suffix}")
 
-    if fmt in ("yaml", "yml"):
+    if fmt == "yaml":
         _write_yaml(path, data)
     elif fmt == "json":
         _write_json(path, data)

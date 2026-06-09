@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from konfig.settings.parsers import parse_file, write_file
+from konfig.settings.parsers import parse_file, resolve_format, write_file
 
 
 class TestParseYAML:
@@ -110,9 +110,6 @@ class TestWriteFile:
         f = tmp_path / "config.xml"
         with pytest.raises(ValueError, match="Unsupported"):
             write_file(f, {})
-
-
-from konfig.settings.parsers import resolve_format
 
 
 class TestResolveFormat:
