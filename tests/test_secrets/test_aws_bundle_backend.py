@@ -141,3 +141,43 @@ class TestErrorHandling:
         backend = AWSSecretsBundleBackend(ARN, client=client)
         with pytest.raises(ValueError, match="no SecretString"):
             backend.get("a")
+
+
+class TestWritePath:
+    def test_set_writes_whole_bundle(self) -> None:
+        client = FakeSMClient(json.dumps({"a": "1"}))
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        backend.set("b", "2")
+        assert json.loads(client.put_calls[-1]) == {"a": "1", "b": "2"}
+
+    def test_set_is_readable_via_write_through(self) -> None:
+        clock = Clock()
+        client = FakeSMClient(json.dumps({"a": "1"}))
+        backend = AWSSecretsBundleBackend(ARN, ttl=300, client=client, time_func=clock)
+        backend.set("b", "2")
+        gets_before = client.get_calls
+        assert backend.get("b") == "2"          # served from write-through cache
+        assert client.get_calls == gets_before  # no extra fetch
+
+    def test_delete_removes_key(self) -> None:
+        client = FakeSMClient(json.dumps({"a": "1", "b": "2"}))
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        backend.delete("a")
+        assert json.loads(client.put_calls[-1]) == {"b": "2"}
+
+    def test_delete_missing_key_is_noop(self) -> None:
+        client = FakeSMClient(json.dumps({"a": "1"}))
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        backend.delete("nope")
+        assert json.loads(client.put_calls[-1]) == {"a": "1"}
+
+    def test_set_refetches_before_write(self) -> None:
+        # Cache is warmed, then the secret changes underneath; set must not
+        # clobber the externally-added key.
+        clock = Clock()
+        client = FakeSMClient(json.dumps({"a": "1"}))
+        backend = AWSSecretsBundleBackend(ARN, ttl=300, client=client, time_func=clock)
+        backend.get("a")  # warms cache with {"a": "1"}
+        client._secret_string = json.dumps({"a": "1", "external": "x"})
+        backend.set("b", "2")
+        assert json.loads(client.put_calls[-1]) == {"a": "1", "external": "x", "b": "2"}

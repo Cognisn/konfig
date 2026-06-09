@@ -103,11 +103,23 @@ class AWSSecretsBundleBackend(SecretBackend):
     def get(self, key: str) -> str | None:
         return self._bundle().get(key)
 
+    def _write(self, bundle: dict[str, str]) -> None:
+        """Persist the whole bundle to AWS and update the write-through cache."""
+        self._client.put_secret_value(
+            SecretId=self._arn, SecretString=json.dumps(bundle)
+        )
+        self._cache = bundle
+        self._cache_at = self._time()
+
     def set(self, key: str, value: str) -> None:
-        raise NotImplementedError
+        bundle = self._fetch()  # re-fetch before write to narrow the race window
+        bundle[key] = value
+        self._write(bundle)
 
     def delete(self, key: str) -> None:
-        raise NotImplementedError
+        bundle = self._fetch()  # re-fetch before write to narrow the race window
+        bundle.pop(key, None)
+        self._write(bundle)
 
     def has(self, key: str) -> bool:
         return key in self._bundle()
