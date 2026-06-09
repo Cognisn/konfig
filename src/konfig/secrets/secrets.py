@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Optional
 
 from konfig.secrets.backend import SecretBackend
@@ -37,7 +38,11 @@ class Secrets:
         self._service_name = service_name
         self._settings = settings
 
-        if backend is not None:
+        env_arn = os.environ.get("KONFIG_AWS_SECRETS_MANAGER")
+        if env_arn:
+            # Hard override: the env var wins over an explicit backend and config.
+            self._backend = self._create_bundle_backend(env_arn)
+        elif backend is not None:
             self._backend = backend
         else:
             self._backend = self._auto_detect_backend()
@@ -77,6 +82,14 @@ class Secrets:
         if self._settings:
             master_key = self._settings.get("secrets.master_key")
         return EncryptedFileBackend(file_path, master_key=master_key)
+
+    def _create_bundle_backend(self, arn: str) -> SecretBackend:
+        from konfig.secrets.aws_bundle_backend import AWSSecretsBundleBackend
+
+        ttl = 300
+        if self._settings:
+            ttl = int(self._settings.get("secrets.aws.cache_ttl", 300))
+        return AWSSecretsBundleBackend(arn=arn, ttl=ttl)
 
     def _create_aws_backend(self) -> SecretBackend:
         from konfig.secrets.aws_backend import AWSSecretsManagerBackend

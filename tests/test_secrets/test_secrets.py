@@ -87,6 +87,7 @@ class TestSecretsAutoDetection:
 
     def test_encrypted_file_fallback(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("KONFIG_MASTER_KEY", raising=False)
+        monkeypatch.delenv("KONFIG_AWS_SECRETS_MANAGER", raising=False)
         settings = Settings(defaults={
             "secrets": {
                 "backend": "encrypted_file",
@@ -98,3 +99,37 @@ class TestSecretsAutoDetection:
         assert isinstance(secrets._backend, EncryptedFileBackend)
         secrets.set("key", "value")
         assert secrets.get("key") == "value"
+
+
+class TestEnvVarBundleSelection:
+    def test_env_var_overrides_explicit_backend(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(
+            "KONFIG_AWS_SECRETS_MANAGER",
+            "arn:aws:secretsmanager:eu-west-1:123456789012:secret:app/s-AbCdEf",
+        )
+        from konfig.secrets.aws_bundle_backend import AWSSecretsBundleBackend
+
+        captured: dict[str, object] = {}
+
+        def fake_init(self, arn, ttl=300, client=None, time_func=None):
+            captured["arn"] = arn
+            captured["ttl"] = ttl
+            self._cache = {}
+            self._cache_at = 0.0
+
+        # Avoid constructing a real boto3 client.
+        monkeypatch.setattr(AWSSecretsBundleBackend, "__init__", fake_init)
+
+        secrets = Secrets(backend=InMemoryBackend())
+        assert isinstance(secrets._backend, AWSSecretsBundleBackend)
+        assert captured["arn"].endswith("s-AbCdEf")
+
+    def test_no_env_var_uses_explicit_backend(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("KONFIG_AWS_SECRETS_MANAGER", raising=False)
+        backend = InMemoryBackend()
+        secrets = Secrets(backend=backend)
+        assert secrets._backend is backend
