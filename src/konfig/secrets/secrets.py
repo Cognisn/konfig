@@ -18,10 +18,14 @@ logger = logging.getLogger(__name__)
 class Secrets:
     """Unified secrets API with pluggable backends.
 
-    Backend auto-detection order:
-      1. Explicit backend from settings (``secrets.backend``)
-      2. OS keyring if available
-      3. Encrypted file fallback
+    Backend selection order (highest priority first):
+      1. ``KONFIG_AWS_SECRETS_MANAGER`` env var (hard override) — uses the
+         designated AWS Secrets Manager secret as a JSON bundle. Wins over an
+         explicit ``backend=`` argument and over config.
+      2. Explicit backend instance passed as ``backend=``.
+      3. Explicit backend from settings (``secrets.backend``).
+      4. OS keyring if available.
+      5. Encrypted file fallback.
 
     Args:
         service_name: Namespace for keyring/file storage.
@@ -88,7 +92,7 @@ class Secrets:
 
         ttl = 300
         if self._settings:
-            ttl = int(self._settings.get("secrets.aws.cache_ttl", 300))
+            ttl = self._settings.get("secrets.aws.cache_ttl", 300, cast=int)
         return AWSSecretsBundleBackend(arn=arn, ttl=ttl)
 
     def _create_aws_backend(self) -> SecretBackend:

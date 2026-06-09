@@ -80,7 +80,8 @@ class TestSecretURIResolution:
 
 
 class TestSecretsAutoDetection:
-    def test_explicit_backend(self) -> None:
+    def test_explicit_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("KONFIG_AWS_SECRETS_MANAGER", raising=False)
         backend = InMemoryBackend()
         secrets = Secrets(backend=backend)
         assert secrets._backend is backend
