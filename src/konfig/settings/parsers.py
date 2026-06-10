@@ -44,17 +44,17 @@ def resolve_format(path: Optional[Path], override: Optional[str]) -> str:
         ValueError: If ``override`` is set but not one of yaml/json/sqlite.
     """
     if override:
-        fmt = override.strip().lower()
-        if fmt not in ALLOWED_FORMAT_OVERRIDES:
+        normalised = override.strip().lower()
+        if normalised not in ALLOWED_FORMAT_OVERRIDES:
             raise ValueError(
                 f"Invalid KONFIG_CONFIG_FORMAT {override!r}; "
                 f"allowed values: {', '.join(ALLOWED_FORMAT_OVERRIDES)}"
             )
-        return fmt
+        return normalised
     if path is not None:
-        fmt = _format_from_extension(path)
-        if fmt is not None:
-            return fmt
+        detected = _format_from_extension(path)
+        if detected is not None:
+            return detected
     return "yaml"
 
 
