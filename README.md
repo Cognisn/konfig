@@ -91,6 +91,27 @@ async with AppContext(name="My Server", version="2.0.0") as ctx:
     await run_server(ctx.settings)
 ```
 
+### Config file format
+
+The config file format is chosen by the `KONFIG_CONFIG_FORMAT` environment variable
+(`yaml`, `json`, or `sqlite`). When unset, the format is detected from the file extension,
+defaulting to YAML. Reading, updating, and creating settings work in every format.
+(TOML config files are still supported by extension detection, but are read-only and
+cannot be selected via `KONFIG_CONFIG_FORMAT`.)
+
+```bash
+export KONFIG_CONFIG_FORMAT=sqlite   # store settings in a SQLite database file
+```
+
+```python
+from konfig import Settings
+
+settings = Settings(config_file="config.db")
+settings.set("database.host", "localhost", persist="user")  # written to SQLite
+settings.set("debug", True)                                  # omit persist: in-memory only
+host = settings.get("database.host")
+```
+
 Each subsystem (Settings, Secrets, LogManager) can also be used independently. See the full documentation in the [`docs/`](docs/) directory:
 
 - [Settings Guide](docs/settings.md)
