@@ -1,4 +1,5 @@
 """Abstract interface for secret storage backends."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

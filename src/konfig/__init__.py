@@ -1,4 +1,5 @@
 """Konfig — Settings, Secrets, and Logging for Python applications."""
+
 from __future__ import annotations
 
 from pathlib import Path

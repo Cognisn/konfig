@@ -1,17 +1,19 @@
 """Tests for settings layers."""
+
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 import pytest
 
 from konfig.settings.layers import (
+    _MISSING,
     DefaultsLayer,
     EnvLayer,
     FileLayer,
     RuntimeLayer,
-    _MISSING,
 )
 
 
@@ -107,3 +109,37 @@ class TestRuntimeLayer:
         layer.set("db.host", "runtimehost")
         layer.set("db.port", 5432)
         assert layer.get_section("db") == {"host": "runtimehost", "port": 5432}
+
+
+class TestFileLayerSqlite:
+    def test_sqlite_set_get_roundtrip(self, tmp_path: Path) -> None:
+        db = tmp_path / "config.sqlite"
+        layer = FileLayer(db, fmt="sqlite")
+        layer.set("database.host", "localhost")
+        assert layer.get("database.host") == "localhost"
+        # A fresh layer reads the persisted value back from the DB.
+        reloaded = FileLayer(db, fmt="sqlite")
+        assert reloaded.get("database.host") == "localhost"
+
+    def test_sqlite_delete_persists(self, tmp_path: Path) -> None:
+        db = tmp_path / "config.sqlite"
+        layer = FileLayer(db, fmt="sqlite")
+        layer.set("a", "1")
+        assert layer.delete("a") is True
+        reloaded = FileLayer(db, fmt="sqlite")
+        assert reloaded.get("a") is _MISSING
+
+
+class TestFileLayerSqliteErrors:
+    def test_graceful_swallows_non_db_file(self, tmp_path: Path) -> None:
+        # A YAML text file read as SQLite is not a valid DB; graceful -> empty.
+        p = tmp_path / "config.yaml"
+        p.write_text("database:\n  host: localhost\n", encoding="utf-8")
+        layer = FileLayer(p, graceful=True, fmt="sqlite")
+        assert layer.get("database.host") is _MISSING
+
+    def test_non_graceful_raises_on_non_db_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.yaml"
+        p.write_text("database:\n  host: localhost\n", encoding="utf-8")
+        with pytest.raises(sqlite3.DatabaseError):
+            FileLayer(p, fmt="sqlite")

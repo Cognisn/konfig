@@ -1,4 +1,5 @@
 """Tests for the AppContext lifecycle."""
+
 from __future__ import annotations
 
 import logging
@@ -26,9 +27,11 @@ def _clean_root_logger() -> Generator[None, None, None]:
 class TestAppContextSync:
     def test_context_manager(self, tmp_path: Path) -> None:
         config = tmp_path / "config.yaml"
-        config.write_text("logging:\n  log_dir: {}\n  console_output: none\n".format(
-            tmp_path / "logs"
-        ))
+        config.write_text(
+            "logging:\n  log_dir: {}\n  console_output: none\n".format(
+                tmp_path / "logs"
+            )
+        )
         with AppContext(
             name="TestApp",
             version="1.0.0",
@@ -45,7 +48,10 @@ class TestAppContextSync:
             name="Test",
             defaults={
                 "key": "value",
-                "logging": {"log_dir": str(tmp_path / "logs"), "console_output": "none"},
+                "logging": {
+                    "log_dir": str(tmp_path / "logs"),
+                    "console_output": "none",
+                },
             },
         ) as ctx:
             assert ctx.settings.get("key") == "value"
@@ -59,7 +65,10 @@ class TestAppContextSync:
                     "file_path": str(tmp_path / "secrets.enc"),
                     "master_key": "test-key",
                 },
-                "logging": {"log_dir": str(tmp_path / "logs"), "console_output": "none"},
+                "logging": {
+                    "log_dir": str(tmp_path / "logs"),
+                    "console_output": "none",
+                },
             },
         ) as ctx:
             ctx.secrets.set("api_key", "sk-test")
@@ -79,7 +88,9 @@ class TestAppContextSync:
     def test_cleanup_on_exit(self, tmp_path: Path) -> None:
         with AppContext(
             name="Test",
-            defaults={"logging": {"log_dir": str(tmp_path / "logs"), "console_output": "none"}},
+            defaults={
+                "logging": {"log_dir": str(tmp_path / "logs"), "console_output": "none"}
+            },
         ) as ctx:
             manager = ctx.log_manager
         # After exit, handlers should be cleaned up
@@ -94,7 +105,10 @@ class TestAppContextAsync:
             version="2.0.0",
             defaults={
                 "app": {"async": True},
-                "logging": {"log_dir": str(tmp_path / "logs"), "console_output": "none"},
+                "logging": {
+                    "log_dir": str(tmp_path / "logs"),
+                    "console_output": "none",
+                },
             },
         ) as ctx:
             assert ctx.settings.get("app.async") is True
@@ -104,7 +118,9 @@ class TestAppContextAsync:
     async def test_async_cleanup(self, tmp_path: Path) -> None:
         async with AppContext(
             name="Test",
-            defaults={"logging": {"log_dir": str(tmp_path / "logs"), "console_output": "none"}},
+            defaults={
+                "logging": {"log_dir": str(tmp_path / "logs"), "console_output": "none"}
+            },
         ) as ctx:
             manager = ctx.log_manager
         assert len(manager._handlers) == 0

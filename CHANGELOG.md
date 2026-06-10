@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-06-10
+
+### Added
+
+- Pluggable config file format: store settings as YAML, JSON, or SQLite, selectable via the
+  `KONFIG_CONFIG_FORMAT` environment variable (default YAML, otherwise detected from the file
+  extension). Reading, updating, and creating settings work across all three formats.
+- AWS Secrets Manager bundle backend: set `KONFIG_AWS_SECRETS_MANAGER=<secret-ARN>` to make
+  konfig read and write all secrets to a single designated AWS Secrets Manager secret holding
+  a JSON bundle (each konfig key is a key within the JSON). The env var is a hard override over
+  an explicit backend and over config. Region is derived from the ARN. The designated secret
+  must already exist. Requires `pip install konfig[aws]`.
+- TTL read cache for the bundle backend (default 300s, configurable via `secrets.aws.cache_ttl`)
+  with write-through and re-fetch-before-write to narrow the lost-update window.
+
+### Tests
+
+- Opt-in LocalStack integration test for the AWS Secrets Manager bundle backend
+  (`pytest -m localstack`), with a `docker-compose.yml` for local provisioning.
+
 ## [0.1.1] - 2026-04-11
 
 ### Fixed

@@ -1,4 +1,5 @@
 """AES-256 encrypted file backend for secret storage."""
+
 from __future__ import annotations
 
 import base64

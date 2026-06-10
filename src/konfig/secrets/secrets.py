@@ -1,7 +1,9 @@
 """Secrets class — frontend API with auto-detection and secret:// URI resolution."""
+
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Optional
 
 from konfig.secrets.backend import SecretBackend
@@ -17,10 +19,14 @@ logger = logging.getLogger(__name__)
 class Secrets:
     """Unified secrets API with pluggable backends.
 
-    Backend auto-detection order:
-      1. Explicit backend from settings (``secrets.backend``)
-      2. OS keyring if available
-      3. Encrypted file fallback
+    Backend selection order (highest priority first):
+      1. ``KONFIG_AWS_SECRETS_MANAGER`` env var (hard override) — uses the
+         designated AWS Secrets Manager secret as a JSON bundle. Wins over an
+         explicit ``backend=`` argument and over config.
+      2. Explicit backend instance passed as ``backend=``.
+      3. Explicit backend from settings (``secrets.backend``).
+      4. OS keyring if available.
+      5. Encrypted file fallback.
 
     Args:
         service_name: Namespace for keyring/file storage.
@@ -37,7 +43,11 @@ class Secrets:
         self._service_name = service_name
         self._settings = settings
 
-        if backend is not None:
+        env_arn = os.environ.get("KONFIG_AWS_SECRETS_MANAGER")
+        if env_arn:
+            # Hard override: the env var wins over an explicit backend and config.
+            self._backend = self._create_bundle_backend(env_arn)
+        elif backend is not None:
             self._backend = backend
         else:
             self._backend = self._auto_detect_backend()
@@ -77,6 +87,14 @@ class Secrets:
         if self._settings:
             master_key = self._settings.get("secrets.master_key")
         return EncryptedFileBackend(file_path, master_key=master_key)
+
+    def _create_bundle_backend(self, arn: str) -> SecretBackend:
+        from konfig.secrets.aws_bundle_backend import AWSSecretsBundleBackend
+
+        ttl = 300
+        if self._settings:
+            ttl = self._settings.get("secrets.aws.cache_ttl", 300, cast=int)
+        return AWSSecretsBundleBackend(arn=arn, ttl=ttl)
 
     def _create_aws_backend(self) -> SecretBackend:
         from konfig.secrets.aws_backend import AWSSecretsManagerBackend
@@ -118,6 +136,6 @@ class Secrets:
             The secret value if the URI is valid, or the original value if not a secret URI.
         """
         if isinstance(value, str) and value.startswith("secret://"):
-            secret_key = value[len("secret://"):]
+            secret_key = value[len("secret://") :]
             return self._backend.get(secret_key)
         return value

@@ -1,4 +1,5 @@
 """Tests for the encrypted file backend."""
+
 from __future__ import annotations
 
 import stat
@@ -46,7 +47,9 @@ class TestEncryptedFileBackend:
         backend2 = EncryptedFileBackend(path, master_key="testkey")
         assert backend2.get("key") == "persistent_value"
 
-    def test_auto_generate_master_key(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_auto_generate_master_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("KONFIG_MASTER_KEY", raising=False)
         path = tmp_path / "secrets.enc"
         backend = EncryptedFileBackend(path)
@@ -58,7 +61,9 @@ class TestEncryptedFileBackend:
         backend2 = EncryptedFileBackend(path)
         assert backend2.get("key") == "value"
 
-    def test_master_key_from_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_master_key_from_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("KONFIG_MASTER_KEY", "env-master-key")
         path = tmp_path / "secrets.enc"
         backend = EncryptedFileBackend(path)
@@ -98,7 +103,10 @@ class TestFilePermissions:
         assert mode == 0o600
 
     def test_warns_on_permissive_key_file(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         monkeypatch.delenv("KONFIG_MASTER_KEY", raising=False)
         path = tmp_path / "secrets.enc"
@@ -122,7 +130,10 @@ class TestFilePermissions:
         assert any("group/other permissions" in msg for msg in caplog.messages)
 
     def test_warns_on_auto_generated_key(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         monkeypatch.delenv("KONFIG_MASTER_KEY", raising=False)
         path = tmp_path / "secrets.enc"

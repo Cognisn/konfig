@@ -34,6 +34,40 @@ For AWS Secrets Manager support:
 pip install konfig[aws]
 ```
 
+## Secrets
+
+### AWS Secrets Manager (designated secret)
+
+Point konfig at a single AWS secret that holds a JSON bundle of your secrets (the secret must
+already exist):
+
+```bash
+export KONFIG_AWS_SECRETS_MANAGER=arn:aws:secretsmanager:eu-west-1:123456789012:secret:myapp/secrets-AbCdEf
+```
+
+```python
+from konfig import Secrets
+
+secrets = Secrets()               # env var selects the AWS bundle backend
+api_key = secrets.get("api_key")
+secrets.set("api_key", "sk-new")  # read-modify-write back to the bundle
+```
+
+Requires `pip install konfig[aws]`.
+
+### Running the LocalStack integration test
+
+The AWS bundle backend has an opt-in integration test that runs against a local
+[LocalStack](https://www.localstack.cloud/) container (no AWS account needed). It
+auto-skips when LocalStack is not running, so it never affects the normal test run.
+
+```bash
+docker compose up -d         # start LocalStack
+pip install -e ".[dev,aws]"  # boto3 + dev tools
+pytest -m localstack         # run only the integration test
+docker compose down          # stop LocalStack
+```
+
 ## Quick Start
 
 ```python
@@ -55,6 +89,27 @@ For async applications:
 ```python
 async with AppContext(name="My Server", version="2.0.0") as ctx:
     await run_server(ctx.settings)
+```
+
+### Config file format
+
+The config file format is chosen by the `KONFIG_CONFIG_FORMAT` environment variable
+(`yaml`, `json`, or `sqlite`). When unset, the format is detected from the file extension,
+defaulting to YAML. Reading, updating, and creating settings work in every format.
+(TOML config files are still supported by extension detection, but are read-only and
+cannot be selected via `KONFIG_CONFIG_FORMAT`.)
+
+```bash
+export KONFIG_CONFIG_FORMAT=sqlite   # store settings in a SQLite database file
+```
+
+```python
+from konfig import Settings
+
+settings = Settings(config_file="config.db")
+settings.set("database.host", "localhost", persist="user")  # written to SQLite
+settings.set("debug", True)                                  # omit persist: in-memory only
+host = settings.get("database.host")
 ```
 
 Each subsystem (Settings, Secrets, LogManager) can also be used independently. See the full documentation in the [`docs/`](docs/) directory:

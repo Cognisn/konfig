@@ -1,4 +1,5 @@
 """LogManager — configure Python logging from settings."""
+
 from __future__ import annotations
 
 import logging
@@ -51,7 +52,9 @@ class LogManager:
         self._app_name = app_name
         self._version = version
         resolved_app_id = app_id or app_id_from(app_name)
-        self._log_dir = Path(log_dir) if log_dir is not None else platform_log_dir(resolved_app_id)
+        self._log_dir = (
+            Path(log_dir) if log_dir is not None else platform_log_dir(resolved_app_id)
+        )
         self._level = getattr(logging, level.upper(), logging.INFO)
         self._format = log_format
         self._retention_runs = retention_runs
@@ -163,6 +166,7 @@ class LogManager:
 
 def _get_pid() -> int:
     import os
+
     return os.getpid()
 
 

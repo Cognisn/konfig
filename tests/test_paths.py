@@ -1,4 +1,5 @@
 """Tests for platform-aware default paths."""
+
 from __future__ import annotations
 
 import sys
