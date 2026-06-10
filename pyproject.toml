@@ -40,6 +40,7 @@ dev = [
     "black>=24.0.0,<25",
     "isort>=5.13.0,<6",
     "types-PyYAML>=6.0",
+    "tomli>=2.0",
 ]
 
 [tool.hatch.version]
