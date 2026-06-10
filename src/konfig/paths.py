@@ -17,6 +17,7 @@ Provides OS-conventional base directories:
     data    → %APPDATA%/<app_id>/
     logs    → %LOCALAPPDATA%/<app_id>/logs/
 """
+
 from __future__ import annotations
 
 import os
@@ -49,7 +50,10 @@ def config_dir(app_id: str) -> Path:
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / app_id
     elif sys.platform == "win32":
-        return Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / app_id
+        return (
+            Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+            / app_id
+        )
     else:
         xdg = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
         return Path(xdg) / app_id
@@ -60,7 +64,10 @@ def data_dir(app_id: str) -> Path:
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / app_id
     elif sys.platform == "win32":
-        return Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / app_id
+        return (
+            Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+            / app_id
+        )
     else:
         xdg = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
         return Path(xdg) / app_id

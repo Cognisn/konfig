@@ -1,4 +1,5 @@
 """Tests for the Settings class."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -31,7 +32,9 @@ class TestSettingsGet:
         s = Settings(config_file=f, defaults={"database": {"host": "localhost"}})
         assert s.get("database.host") == "filehost"
 
-    def test_env_overrides_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_env_overrides_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         f = tmp_path / "config.yaml"
         f.write_text("database:\n  host: filehost\n")
         monkeypatch.setenv("MYAPP__DATABASE__HOST", "envhost")
@@ -139,10 +142,10 @@ class TestSystemUserLayers:
             defaults={"db": {"timeout": 30}},
         )
         section = s.get_section("db")
-        assert section["host"] == "user"       # user wins
-        assert section["port"] == 5432         # system
-        assert section["name"] == "mydb"       # user only
-        assert section["timeout"] == 30        # defaults
+        assert section["host"] == "user"  # user wins
+        assert section["port"] == 5432  # system
+        assert section["name"] == "mydb"  # user only
+        assert section["timeout"] == 30  # defaults
 
 
 class TestPersistSettings:

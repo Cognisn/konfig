@@ -1,4 +1,5 @@
 """AWS Secrets Manager single-secret JSON bundle backend (optional)."""
+
 from __future__ import annotations
 
 import json
@@ -56,7 +57,7 @@ class AWSSecretsBundleBackend(SecretBackend):
         self._region = _parse_region(arn)
         self._ttl = ttl
         self._time = time_func
-        self._client = client if client is not None else self._create_client()
+        self._client: Any = client if client is not None else self._create_client()
         self._cache: dict[str, str] | None = None
         self._cache_at: float = 0.0
 

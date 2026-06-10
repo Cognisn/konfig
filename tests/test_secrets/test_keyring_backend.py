@@ -1,11 +1,12 @@
 """Tests for the keyring backend (mocked)."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from konfig.secrets.keyring_backend import KeyringBackend, _KEYS_ENTRY
+from konfig.secrets.keyring_backend import _KEYS_ENTRY, KeyringBackend
 
 
 class MockKeyring:

@@ -1,4 +1,5 @@
 """Tests for log formatters."""
+
 from __future__ import annotations
 
 import json
@@ -27,8 +28,13 @@ class TestTextFormatter:
     def test_format_contains_timestamp(self) -> None:
         formatter = TextFormatter()
         record = logging.LogRecord(
-            name="app", level=logging.WARNING, pathname="", lineno=0,
-            msg="warn", args=(), exc_info=None,
+            name="app",
+            level=logging.WARNING,
+            pathname="",
+            lineno=0,
+            msg="warn",
+            args=(),
+            exc_info=None,
         )
         output = formatter.format(record)
         # Should contain ISO-ish timestamp
@@ -39,8 +45,13 @@ class TestJSONFormatter:
     def test_format_is_valid_json(self) -> None:
         formatter = JSONFormatter()
         record = logging.LogRecord(
-            name="app.server", level=logging.INFO, pathname="", lineno=0,
-            msg="Server started", args=(), exc_info=None,
+            name="app.server",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Server started",
+            args=(),
+            exc_info=None,
         )
         output = formatter.format(record)
         data = json.loads(output)
@@ -53,8 +64,13 @@ class TestJSONFormatter:
     def test_format_with_args(self) -> None:
         formatter = JSONFormatter()
         record = logging.LogRecord(
-            name="app", level=logging.DEBUG, pathname="", lineno=0,
-            msg="Count: %d", args=(42,), exc_info=None,
+            name="app",
+            level=logging.DEBUG,
+            pathname="",
+            lineno=0,
+            msg="Count: %d",
+            args=(42,),
+            exc_info=None,
         )
         output = formatter.format(record)
         data = json.loads(output)
@@ -66,11 +82,17 @@ class TestJSONFormatter:
             raise ValueError("test error")
         except ValueError:
             import sys
+
             exc_info = sys.exc_info()
 
         record = logging.LogRecord(
-            name="app", level=logging.ERROR, pathname="", lineno=0,
-            msg="Failed", args=(), exc_info=exc_info,
+            name="app",
+            level=logging.ERROR,
+            pathname="",
+            lineno=0,
+            msg="Failed",
+            args=(),
+            exc_info=exc_info,
         )
         output = formatter.format(record)
         data = json.loads(output)

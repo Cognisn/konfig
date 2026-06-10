@@ -1,4 +1,5 @@
 """OS keyring backend for secret storage."""
+
 from __future__ import annotations
 
 import logging

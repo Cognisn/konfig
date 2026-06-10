@@ -1,4 +1,5 @@
 """Config file parsers for YAML, TOML, and JSON formats."""
+
 from __future__ import annotations
 
 import json
@@ -125,7 +126,9 @@ def write_file(path: Path, data: dict[str, Any], fmt: Optional[str] = None) -> N
     if fmt is None:
         fmt = _format_from_extension(path)
         if fmt is None:
-            raise ValueError(f"Unsupported config file format for writing: {path.suffix}")
+            raise ValueError(
+                f"Unsupported config file format for writing: {path.suffix}"
+            )
 
     if fmt == "yaml":
         _write_yaml(path, data)

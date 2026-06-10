@@ -3,6 +3,7 @@
 Stores a nested config dict as a flat key-value table: each leaf value is one
 row keyed by its dot-notation path, with the value JSON-encoded.
 """
+
 from __future__ import annotations
 
 import json
@@ -11,8 +12,7 @@ from pathlib import Path
 from typing import Any
 
 _CREATE_TABLE = (
-    "CREATE TABLE IF NOT EXISTS settings ("
-    "key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+    "CREATE TABLE IF NOT EXISTS settings (" "key TEXT PRIMARY KEY, value TEXT NOT NULL)"
 )
 
 

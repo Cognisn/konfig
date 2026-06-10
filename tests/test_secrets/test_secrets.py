@@ -1,4 +1,5 @@
 """Tests for the Secrets frontend API."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -85,15 +86,19 @@ class TestSecretsAutoDetection:
         secrets = Secrets(backend=backend)
         assert secrets._backend is backend
 
-    def test_encrypted_file_fallback(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_encrypted_file_fallback(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("KONFIG_MASTER_KEY", raising=False)
-        settings = Settings(defaults={
-            "secrets": {
-                "backend": "encrypted_file",
-                "file_path": str(tmp_path / "secrets.enc"),
-                "master_key": "test-master-key",
+        settings = Settings(
+            defaults={
+                "secrets": {
+                    "backend": "encrypted_file",
+                    "file_path": str(tmp_path / "secrets.enc"),
+                    "master_key": "test-master-key",
+                }
             }
-        })
+        )
         secrets = Secrets(service_name="test", settings=settings)
         assert isinstance(secrets._backend, EncryptedFileBackend)
         secrets.set("key", "value")

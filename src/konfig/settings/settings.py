@@ -1,4 +1,5 @@
 """Settings class — unified layered access to configuration."""
+
 from __future__ import annotations
 
 import os
@@ -6,11 +7,11 @@ from pathlib import Path
 from typing import Any, Callable, Literal, Optional, TypeVar
 
 from konfig.settings.layers import (
+    _MISSING,
     DefaultsLayer,
     EnvLayer,
     FileLayer,
     RuntimeLayer,
-    _MISSING,
 )
 from konfig.settings.parsers import resolve_format
 

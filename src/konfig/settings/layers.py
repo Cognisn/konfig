@@ -7,6 +7,7 @@ Layers (lowest to highest precedence):
   4. EnvLayer — values from environment variables
   5. RuntimeLayer — values set programmatically at runtime
 """
+
 from __future__ import annotations
 
 import logging
@@ -66,6 +67,7 @@ def _get_section(data: dict[str, Any], prefix: str) -> dict[str, Any]:
 
 class _Missing:
     """Sentinel for missing values."""
+
     _instance: Optional[_Missing] = None
 
     def __new__(cls) -> _Missing:
@@ -230,7 +232,7 @@ class EnvLayer:
         result: dict[str, Any] = {}
         for env_key, value in os.environ.items():
             if env_key.startswith(env_prefix):
-                remainder = env_key[len(env_prefix):].lower().replace("__", ".")
+                remainder = env_key[len(env_prefix) :].lower().replace("__", ".")
                 _set_nested(result, remainder, value)
         return result
 

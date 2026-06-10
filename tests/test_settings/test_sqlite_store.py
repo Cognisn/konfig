@@ -1,15 +1,11 @@
 """Tests for the SQLite config store."""
+
 from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
 
-from konfig.settings.sqlite_store import (
-    _flatten,
-    _unflatten,
-    read_sqlite,
-    write_sqlite,
-)
+from konfig.settings.sqlite_store import _flatten, _unflatten, read_sqlite, write_sqlite
 
 
 class TestFlatten:

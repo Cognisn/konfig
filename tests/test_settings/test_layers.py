@@ -1,4 +1,5 @@
 """Tests for settings layers."""
+
 from __future__ import annotations
 
 import os
@@ -8,11 +9,11 @@ from pathlib import Path
 import pytest
 
 from konfig.settings.layers import (
+    _MISSING,
     DefaultsLayer,
     EnvLayer,
     FileLayer,
     RuntimeLayer,
-    _MISSING,
 )
 
 

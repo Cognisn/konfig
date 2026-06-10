@@ -1,4 +1,5 @@
 """Secrets class — frontend API with auto-detection and secret:// URI resolution."""
+
 from __future__ import annotations
 
 import logging
@@ -135,6 +136,6 @@ class Secrets:
             The secret value if the URI is valid, or the original value if not a secret URI.
         """
         if isinstance(value, str) and value.startswith("secret://"):
-            secret_key = value[len("secret://"):]
+            secret_key = value[len("secret://") :]
             return self._backend.get(secret_key)
         return value

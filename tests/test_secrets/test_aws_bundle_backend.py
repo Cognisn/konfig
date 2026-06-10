@@ -1,4 +1,5 @@
 """Tests for the AWS Secrets Manager bundle backend."""
+
 from __future__ import annotations
 
 import json
@@ -156,7 +157,7 @@ class TestWritePath:
         backend = AWSSecretsBundleBackend(ARN, ttl=300, client=client, time_func=clock)
         backend.set("b", "2")
         gets_before = client.get_calls
-        assert backend.get("b") == "2"          # served from write-through cache
+        assert backend.get("b") == "2"  # served from write-through cache
         assert client.get_calls == gets_before  # no extra fetch
 
     def test_delete_removes_key(self) -> None:
@@ -184,7 +185,9 @@ class TestWritePath:
 
 
 class TestBotoImport:
-    def test_missing_boto3_raises_helpful_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_missing_boto3_raises_helpful_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import builtins
 
         real_import = builtins.__import__

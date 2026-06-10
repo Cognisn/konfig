@@ -1,4 +1,5 @@
 """AppContext — optional lightweight app lifecycle context manager."""
+
 from __future__ import annotations
 
 import logging
@@ -9,7 +10,6 @@ from konfig.logging.manager import LogManager
 from konfig.paths import app_id_from, default_config_file, default_system_config_file
 from konfig.secrets.secrets import Secrets
 from konfig.settings.settings import Settings
-
 
 _NOT_INITIALISED_MSG = "AppContext is not initialised. Use it as a context manager."
 
@@ -61,7 +61,9 @@ class AppContext:
         self._env_prefix = env_prefix
         self._app_id = app_id_from(name, env_prefix)
         self._config_file = config_file or default_config_file(self._app_id)
-        self._system_config_file = system_config_file or default_system_config_file(self._app_id)
+        self._system_config_file = system_config_file or default_system_config_file(
+            self._app_id
+        )
         self._defaults = defaults
         self._service_name = service_name or self._app_id
 

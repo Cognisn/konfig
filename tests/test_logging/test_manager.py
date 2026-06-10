@@ -1,4 +1,5 @@
 """Tests for the LogManager."""
+
 from __future__ import annotations
 
 import logging
@@ -46,8 +47,8 @@ class TestLogManager:
         manager.shutdown()
 
     def test_never_writes_stdout(self, tmp_path: Path) -> None:
-        import sys
         import io
+        import sys
 
         capture = io.StringIO()
         old_stdout = sys.stdout
@@ -68,8 +69,10 @@ class TestLogManager:
         # Manager should only have a file handler, no console
         our_handlers = manager._handlers
         stream_handlers = [
-            h for h in our_handlers
-            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+            h
+            for h in our_handlers
+            if isinstance(h, logging.StreamHandler)
+            and not isinstance(h, logging.FileHandler)
         ]
         assert len(stream_handlers) == 0
         manager.shutdown()
@@ -81,7 +84,8 @@ class TestLogManager:
         manager.setup()
         our_handlers = manager._handlers
         stream_handlers = [
-            h for h in our_handlers
+            h
+            for h in our_handlers
             if isinstance(h, logging.StreamHandler)
             and not isinstance(h, logging.FileHandler)
         ]
@@ -115,6 +119,7 @@ class TestLogManager:
         # 5 old + 1 new = 6 total, keep 3 → should have 3 old + 1 new = but cleanup runs before creation
         # cleanup removes 2 oldest, leaving 3. Then new one is created = 4 total.
         from konfig.logging.run_directory import list_run_directories
+
         dirs = list_run_directories(log_dir)
         assert len(dirs) == 4  # 3 kept + 1 new
         manager.shutdown()
@@ -129,17 +134,19 @@ class TestLogManager:
 
 class TestLogManagerFromSettings:
     def test_from_settings(self, tmp_path: Path) -> None:
-        settings = Settings(defaults={
-            "logging": {
-                "log_dir": str(tmp_path / "logs"),
-                "level": "DEBUG",
-                "format": "text",
-                "retention_runs": 5,
-                "max_file_size_mb": 10,
-                "max_files_per_run": 2,
-                "console_output": "none",
+        settings = Settings(
+            defaults={
+                "logging": {
+                    "log_dir": str(tmp_path / "logs"),
+                    "level": "DEBUG",
+                    "format": "text",
+                    "retention_runs": 5,
+                    "max_file_size_mb": 10,
+                    "max_files_per_run": 2,
+                    "console_output": "none",
+                }
             }
-        })
+        )
         manager = LogManager.from_settings(settings, app_name="Test", version="0.1")
         manager.setup()
         assert manager.run_dir is not None

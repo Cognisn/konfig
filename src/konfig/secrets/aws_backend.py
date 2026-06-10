@@ -1,4 +1,5 @@
 """AWS Secrets Manager backend for secret storage (optional)."""
+
 from __future__ import annotations
 
 import json
@@ -36,7 +37,7 @@ class AWSSecretsManagerBackend(SecretBackend):
     def get(self, key: str) -> str | None:
         try:
             response = self._client.get_secret_value(SecretId=self._full_key(key))
-            return response["SecretString"]
+            return str(response["SecretString"])
         except self._client.exceptions.ResourceNotFoundException:
             return None
 

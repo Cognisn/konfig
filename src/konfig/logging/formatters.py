@@ -1,4 +1,5 @@
 """Text and JSON log formatters."""
+
 from __future__ import annotations
 
 import json

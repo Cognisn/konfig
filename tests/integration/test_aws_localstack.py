@@ -4,6 +4,7 @@ Auto-skips unless boto3 is installed AND a LocalStack container is reachable on
 localhost:4566. Run explicitly with: pytest -m localstack
 Start LocalStack first with: docker compose up -d
 """
+
 from __future__ import annotations
 
 import json

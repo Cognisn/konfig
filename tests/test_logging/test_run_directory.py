@@ -1,4 +1,5 @@
 """Tests for run directory creation and retention."""
+
 from __future__ import annotations
 
 import time
@@ -29,6 +30,7 @@ class TestCreateRunDirectory:
         run_dir = create_run_directory(tmp_path)
         # Name should be like 2026-03-28T14-30-00
         import re
+
         assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}", run_dir.name)
 
     def test_latest_symlink(self, tmp_path: Path) -> None:
@@ -86,7 +88,11 @@ class TestListRunDirectories:
         (tmp_path / "2026-03-29T10-00-00").mkdir()
         dirs = list_run_directories(tmp_path)
         names = [d.name for d in dirs]
-        assert names == ["2026-03-27T10-00-00", "2026-03-28T10-00-00", "2026-03-29T10-00-00"]
+        assert names == [
+            "2026-03-27T10-00-00",
+            "2026-03-28T10-00-00",
+            "2026-03-29T10-00-00",
+        ]
 
     def test_empty(self, tmp_path: Path) -> None:
         assert list_run_directories(tmp_path) == []
