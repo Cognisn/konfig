@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -126,3 +127,18 @@ class TestFileLayerSqlite:
         assert layer.delete("a") is True
         reloaded = FileLayer(db, fmt="sqlite")
         assert reloaded.get("a") is _MISSING
+
+
+class TestFileLayerSqliteErrors:
+    def test_graceful_swallows_non_db_file(self, tmp_path: Path) -> None:
+        # A YAML text file read as SQLite is not a valid DB; graceful -> empty.
+        p = tmp_path / "config.yaml"
+        p.write_text("database:\n  host: localhost\n", encoding="utf-8")
+        layer = FileLayer(p, graceful=True, fmt="sqlite")
+        assert layer.get("database.host") is _MISSING
+
+    def test_non_graceful_raises_on_non_db_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.yaml"
+        p.write_text("database:\n  host: localhost\n", encoding="utf-8")
+        with pytest.raises(sqlite3.DatabaseError):
+            FileLayer(p, fmt="sqlite")

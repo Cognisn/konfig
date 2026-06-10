@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sqlite3
 from pathlib import Path
 from typing import Any, Optional
 
@@ -135,7 +136,7 @@ class FileLayer:
         try:
             if self._path.exists():
                 self._data = parse_file(self._path, fmt=self._fmt)
-        except OSError as exc:
+        except (OSError, sqlite3.DatabaseError) as exc:
             if self._graceful:
                 logger.debug("Could not read config file %s: %s", self._path, exc)
                 self._data = {}

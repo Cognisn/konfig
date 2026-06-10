@@ -193,7 +193,7 @@ class Settings:
         self._user_file_layer.reload()
 
     @property
-    def _read_order(self) -> tuple:
+    def _read_order(self) -> tuple[Any, ...]:
         """Layers in highest-to-lowest precedence for reads."""
         return (
             self._runtime_layer,
