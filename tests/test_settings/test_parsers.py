@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from konfig.settings.parsers import parse_file, write_file
+from konfig.settings.parsers import parse_file, resolve_format, write_file
 
 
 class TestParseYAML:
@@ -110,3 +110,35 @@ class TestWriteFile:
         f = tmp_path / "config.xml"
         with pytest.raises(ValueError, match="Unsupported"):
             write_file(f, {})
+
+
+class TestResolveFormat:
+    def test_override_wins(self, tmp_path: Path) -> None:
+        assert resolve_format(tmp_path / "config.yaml", "sqlite") == "sqlite"
+
+    def test_override_case_insensitive(self) -> None:
+        assert resolve_format(None, "SQLite") == "sqlite"
+
+    def test_override_invalid_raises(self) -> None:
+        with pytest.raises(ValueError, match="KONFIG_CONFIG_FORMAT"):
+            resolve_format(None, "xml")
+
+    def test_extension_detection(self, tmp_path: Path) -> None:
+        assert resolve_format(tmp_path / "c.yaml", None) == "yaml"
+        assert resolve_format(tmp_path / "c.yml", None) == "yaml"
+        assert resolve_format(tmp_path / "c.json", None) == "json"
+        assert resolve_format(tmp_path / "c.toml", None) == "toml"
+        assert resolve_format(tmp_path / "c.sqlite", None) == "sqlite"
+        assert resolve_format(tmp_path / "c.db", None) == "sqlite"
+        assert resolve_format(tmp_path / "c.sqlite3", None) == "sqlite"
+
+    def test_default_yaml_when_unknown(self, tmp_path: Path) -> None:
+        assert resolve_format(tmp_path / "c.conf", None) == "yaml"
+        assert resolve_format(None, None) == "yaml"
+
+
+class TestSqliteViaParseFile:
+    def test_write_and_parse_sqlite_with_fmt(self, tmp_path: Path) -> None:
+        f = tmp_path / "store.bin"  # extension intentionally not sqlite-ish
+        write_file(f, {"database": {"host": "localhost"}}, fmt="sqlite")
+        assert parse_file(f, fmt="sqlite") == {"database": {"host": "localhost"}}
