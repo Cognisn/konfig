@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 _TIMESTAMP_FORMAT = "%Y-%m-%dT%H-%M-%S"
 _TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$")
@@ -76,7 +74,12 @@ def cleanup_old_runs(base_dir: Path | str, keep: int) -> list[Path]:
     to_remove = run_dirs[: len(run_dirs) - keep]
     removed: list[Path] = []
     for d in to_remove:
-        shutil.rmtree(d)
+        try:
+            shutil.rmtree(d)
+        except FileNotFoundError:
+            # A concurrent process (e.g. a sibling worker replica sharing this
+            # log directory) removed this run first; nothing left to do.
+            continue
         removed.append(d)
 
     return removed
