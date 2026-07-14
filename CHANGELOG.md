@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-07-13
+
+### Fixed
+
+- Run-log retention no longer crashes when multiple processes share a log directory.
+  `cleanup_old_runs` now tolerates a run directory being removed concurrently by another
+  process (e.g. sibling worker replicas racing the same cleanup), skipping the
+  `FileNotFoundError` instead of aborting.
+
 ## [0.2.0] - 2026-06-10
 
 ### Added

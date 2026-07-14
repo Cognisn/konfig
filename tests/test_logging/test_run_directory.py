@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import pytest
 
 from konfig.logging.run_directory import (
     cleanup_old_runs,
@@ -79,6 +78,32 @@ class TestCleanupOldRuns:
     def test_nonexistent_base_dir(self, tmp_path: Path) -> None:
         removed = cleanup_old_runs(tmp_path / "nonexistent", keep=5)
         assert removed == []
+
+    def test_tolerates_concurrent_removal(self, tmp_path: Path, monkeypatch) -> None:
+        # Processes sharing a log directory (e.g. worker replicas) can both
+        # target the same old runs; the loser of the race finds the run already
+        # gone. cleanup must not crash on that FileNotFoundError.
+        import shutil
+
+        from konfig.logging import run_directory
+
+        dirs = self._make_run_dirs(tmp_path, 4)  # keep=1 -> remove 3 oldest
+        victim = dirs[0]  # the run a sibling process removes concurrently
+        real_rmtree = shutil.rmtree
+
+        def racy_rmtree(path, *args, **kwargs):
+            if Path(path) == victim:
+                real_rmtree(path)  # the sibling process completes the removal
+                raise FileNotFoundError(2, "No such file or directory", str(path))
+            return real_rmtree(path, *args, **kwargs)
+
+        monkeypatch.setattr(run_directory.shutil, "rmtree", racy_rmtree)
+
+        # Must not raise despite the concurrent removal.
+        cleanup_old_runs(tmp_path, keep=1)
+
+        remaining = {d.name for d in list_run_directories(tmp_path)}
+        assert remaining == {dirs[3].name}  # only the newest survives
 
 
 class TestListRunDirectories:
