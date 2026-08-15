@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, TypeVar
 
+from konfig.settings.aws_layer import AwsSettingsLayer
 from konfig.settings.layers import (
     _MISSING,
     DefaultsLayer,
@@ -36,8 +37,10 @@ class Settings:
       1. defaults — hardcoded in the application
       2. system config file — system-wide, shared across all users
       3. user config file — per-user config
-      4. environment variables — mapped from nested keys
-      5. runtime overrides — set programmatically
+      4. AWS settings document — one Secrets Manager secret holding the
+         whole settings tree as JSON (KONFIG_AWS_SETTINGS)
+      5. environment variables — mapped from nested keys
+      6. runtime overrides — set programmatically
 
     Args:
         config_file: Path to the user-level config file (YAML, TOML, or JSON).
@@ -45,6 +48,11 @@ class Settings:
             gracefully — if unreadable due to permissions, it is silently skipped.
         defaults: Dict of default values.
         env_prefix: Prefix for environment variable mapping.
+        aws_settings: ARN or name of an AWS Secrets Manager secret whose
+            SecretString is a JSON object holding the settings tree. The
+            KONFIG_AWS_SETTINGS environment variable overrides this
+            argument. Read-only; requires konfig[aws]. Errors reading or
+            parsing the secret raise immediately at construction.
     """
 
     def __init__(
@@ -53,6 +61,7 @@ class Settings:
         system_config_file: Optional[str | Path] = None,
         defaults: Optional[dict[str, Any]] = None,
         env_prefix: Optional[str] = None,
+        aws_settings: Optional[str] = None,
     ) -> None:
         fmt_override = os.environ.get("KONFIG_CONFIG_FORMAT")
         system_path = Path(system_config_file) if system_config_file else None
@@ -71,6 +80,11 @@ class Settings:
         self._env_layer = EnvLayer(env_prefix)
         self._runtime_layer = RuntimeLayer()
 
+        # The env var is a hard override, mirroring KONFIG_AWS_SECRETS_MANAGER
+        # on the secrets side.
+        aws_source = os.environ.get("KONFIG_AWS_SETTINGS") or aws_settings
+        self._aws_layer = AwsSettingsLayer(aws_source)
+
     def get(
         self,
         key: str,
@@ -81,7 +95,7 @@ class Settings:
         """Get a setting value by dot-notation key.
 
         Layers are checked in reverse precedence order (highest first):
-        runtime -> env -> user file -> system file -> defaults.
+        runtime -> env -> AWS settings -> user file -> system file -> defaults.
 
         Args:
             key: Dot-notation key (e.g. "database.host").
@@ -184,14 +198,17 @@ class Settings:
         result = _deep_merge(result, self._defaults_layer.get_section(prefix))
         result = _deep_merge(result, self._system_file_layer.get_section(prefix))
         result = _deep_merge(result, self._user_file_layer.get_section(prefix))
+        result = _deep_merge(result, self._aws_layer.get_section(prefix))
         result = _deep_merge(result, self._env_layer.get_section(prefix))
         result = _deep_merge(result, self._runtime_layer.get_section(prefix))
         return result
 
     def reload(self) -> None:
-        """Reload both config files from disk."""
+        """Reload both config files from disk and re-fetch the AWS settings
+        document (when configured)."""
         self._system_file_layer.reload()
         self._user_file_layer.reload()
+        self._aws_layer.reload()
 
     @property
     def _read_order(self) -> tuple[Any, ...]:
@@ -199,6 +216,7 @@ class Settings:
         return (
             self._runtime_layer,
             self._env_layer,
+            self._aws_layer,
             self._user_file_layer,
             self._system_file_layer,
             self._defaults_layer,

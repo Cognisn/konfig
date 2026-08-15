@@ -202,3 +202,159 @@ class TestRegionSelection:
         AwsSettingsLayer("myapp/settings")
         assert call_args["service"] == "secretsmanager"
         assert call_args["region_name"] is None
+
+
+class TestSettingsWiring:
+    """The layer wired into Settings via env var / constructor parameter."""
+
+    @pytest.fixture
+    def fake_client(self, monkeypatch: pytest.MonkeyPatch) -> FakeSMClient:
+        """Install a stub client so Settings can build the layer without boto3."""
+        client = FakeSMClient(json.dumps(TREE))
+        monkeypatch.setattr(AwsSettingsLayer, "_create_client", lambda self: client)
+        return client
+
+    def test_env_var_loads_document(
+        self, fake_client: FakeSMClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from konfig.settings.settings import Settings
+
+        monkeypatch.setenv("KONFIG_AWS_SETTINGS", ARN)
+        settings = Settings()
+        assert settings.get("database.host") == "aws-db"
+        assert settings.has("database.port") is True
+        assert settings.get_section("database") == {"host": "aws-db", "port": 5432}
+
+    def test_constructor_parameter_loads_document(
+        self, fake_client: FakeSMClient
+    ) -> None:
+        from konfig.settings.settings import Settings
+
+        settings = Settings(aws_settings=ARN)
+        assert settings.get("database.host") == "aws-db"
+
+    def test_env_var_wins_over_parameter(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from konfig.settings.settings import Settings
+
+        env_client = FakeSMClient(json.dumps({"origin": "env"}))
+        monkeypatch.setattr(AwsSettingsLayer, "_create_client", lambda self: env_client)
+        monkeypatch.setenv("KONFIG_AWS_SETTINGS", ARN)
+        settings = Settings(aws_settings="some-other-secret")
+        assert settings._aws_layer.source == ARN
+        assert settings.get("origin") == "env"
+
+    def test_unused_feature_needs_no_boto3(self) -> None:
+        # No env var, no parameter: constructing Settings must not touch boto3.
+        from konfig.settings.settings import Settings
+
+        settings = Settings(defaults={"a": 1})
+        assert settings.get("a") == 1
+
+    def test_aws_overrides_user_file(
+        self, fake_client: FakeSMClient, tmp_path: Any
+    ) -> None:
+        from konfig.settings.settings import Settings
+
+        config = tmp_path / "config.yaml"
+        config.write_text(
+            "database:\n  host: file-db\n  name: from-file\n", encoding="utf-8"
+        )
+        settings = Settings(config_file=config, aws_settings=ARN)
+        assert settings.get("database.host") == "aws-db"  # aws beats user file
+        assert settings.get("database.name") == "from-file"  # file still visible
+
+    def test_env_var_layer_overrides_aws(
+        self, fake_client: FakeSMClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from konfig.settings.settings import Settings
+
+        monkeypatch.setenv("DATABASE__HOST", "env-db")
+        settings = Settings(aws_settings=ARN)
+        assert settings.get("database.host") == "env-db"
+
+    def test_runtime_set_does_not_touch_aws_layer(
+        self, fake_client: FakeSMClient
+    ) -> None:
+        from konfig.settings.settings import Settings
+
+        settings = Settings(aws_settings=ARN)
+        settings.set("database.host", "runtime-db")
+        assert settings.get("database.host") == "runtime-db"
+        assert settings._aws_layer.get("database.host") == "aws-db"  # unchanged
+
+    def test_persist_user_still_writes_user_file(
+        self, fake_client: FakeSMClient, tmp_path: Any
+    ) -> None:
+        from konfig.settings.settings import Settings
+
+        config = tmp_path / "config.yaml"
+        config.write_text("database:\n  host: file-db\n", encoding="utf-8")
+        settings = Settings(config_file=config, aws_settings=ARN)
+        settings.set("database.name", "written", persist="user")
+        assert "written" in config.read_text(encoding="utf-8")
+        assert settings._aws_layer.data == TREE  # aws layer untouched
+
+    def test_reload_refetches_document(self, fake_client: FakeSMClient) -> None:
+        from konfig.settings.settings import Settings
+
+        settings = Settings(aws_settings=ARN)
+        fake_client._secret_string = json.dumps({"database": {"host": "rotated"}})
+        settings.reload()
+        assert settings.get("database.host") == "rotated"
+
+    def test_get_section_merges_aws_between_file_and_env(
+        self,
+        fake_client: FakeSMClient,
+        tmp_path: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from konfig.settings.settings import Settings
+
+        config = tmp_path / "config.yaml"
+        config.write_text(
+            "database:\n  host: file-db\n  name: from-file\n", encoding="utf-8"
+        )
+        monkeypatch.setenv("DATABASE__PORT", "9999")
+        settings = Settings(config_file=config, aws_settings=ARN)
+        assert settings.get_section("database") == {
+            "host": "aws-db",  # aws beats file
+            "name": "from-file",  # only in file
+            "port": "9999",  # env beats aws
+        }
+
+
+class TestSecretUriComposition:
+    def test_secret_uri_in_document_resolves_via_secrets_backend(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """secret:// values inside the AWS settings document resolve through
+        the active secrets backend, exactly like values from any other layer."""
+        from konfig.secrets.backend import SecretBackend
+        from konfig.secrets.secrets import Secrets
+        from konfig.settings.settings import Settings
+
+        doc = {"database": {"password": "secret://db_password"}}
+        client = FakeSMClient(json.dumps(doc))
+        monkeypatch.setattr(AwsSettingsLayer, "_create_client", lambda self: client)
+
+        class FakeBackend(SecretBackend):
+            def get(self, key: str) -> str | None:
+                return "pw-123" if key == "db_password" else None
+
+            def set(self, key: str, value: str) -> None:  # pragma: no cover
+                raise NotImplementedError
+
+            def delete(self, key: str) -> None:  # pragma: no cover
+                raise NotImplementedError
+
+            def has(self, key: str) -> bool:
+                return key == "db_password"
+
+            def list_keys(self) -> list[str]:
+                return ["db_password"]
+
+        settings = Settings(aws_settings=ARN)
+        secrets = Secrets(backend=FakeBackend())
+        raw = settings.get("database.password")
+        assert raw == "secret://db_password"
+        assert secrets.resolve_uri(raw) == "pw-123"

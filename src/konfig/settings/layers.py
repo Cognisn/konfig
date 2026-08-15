@@ -4,8 +4,9 @@ Layers (lowest to highest precedence):
   1. DefaultsLayer — hardcoded application defaults
   2. FileLayer (system) — system-wide config file
   3. FileLayer (user) — per-user config file
-  4. EnvLayer — values from environment variables
-  5. RuntimeLayer — values set programmatically at runtime
+  4. AwsSettingsLayer — AWS Secrets Manager settings document (see aws_layer.py)
+  5. EnvLayer — values from environment variables
+  6. RuntimeLayer — values set programmatically at runtime
 """
 
 from __future__ import annotations
