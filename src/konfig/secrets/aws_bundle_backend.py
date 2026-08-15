@@ -7,6 +7,7 @@ import logging
 import time
 from typing import Any, Callable
 
+from konfig._aws import parse_region
 from konfig.secrets.backend import SecretBackend
 
 logger = logging.getLogger(__name__)
@@ -15,22 +16,6 @@ _NOT_JSON_OBJECT = "Designated AWS secret is not a JSON object."
 _NO_SECRET_STRING = (
     "Designated AWS secret has no SecretString (binary secrets are not supported)."
 )
-
-
-def _parse_region(arn: str) -> str:
-    """Extract the region from a Secrets Manager ARN.
-
-    ARN shape: ``arn:aws:secretsmanager:<region>:<account>:secret:<name>``.
-    """
-    parts = arn.split(":")
-    if (
-        len(parts) < 6
-        or parts[0] != "arn"
-        or parts[2] != "secretsmanager"
-        or not parts[3]
-    ):
-        raise ValueError(f"Invalid AWS Secrets Manager ARN: {arn!r}")
-    return parts[3]
 
 
 class AWSSecretsBundleBackend(SecretBackend):
@@ -54,7 +39,7 @@ class AWSSecretsBundleBackend(SecretBackend):
         time_func: Callable[[], float] = time.monotonic,
     ) -> None:
         self._arn = arn
-        self._region = _parse_region(arn)
+        self._region = parse_region(arn)
         self._ttl = ttl
         self._time = time_func
         self._client: Any = client if client is not None else self._create_client()
