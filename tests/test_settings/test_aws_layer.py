@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from types import SimpleNamespace
 from typing import Any
 
@@ -139,6 +140,17 @@ class TestFailFast:
         with pytest.raises(ValueError, match="SecretString"):
             AwsSettingsLayer(ARN, client=FakeSMClient(secret_string=None))
 
+    def test_generic_exception_wrapped_in_runtime_error(self) -> None:
+        # Plain Exception (not ClientError) from the client is wrapped in RuntimeError
+        client = FakeSMClient(json.dumps(TREE))
+
+        def raise_generic(*args: Any, **kwargs: Any) -> Any:
+            raise Exception("generic botocore error")
+
+        client.get_secret_value = raise_generic
+        with pytest.raises(RuntimeError, match="myapp/settings-AbCdEf"):
+            AwsSettingsLayer(ARN, client=client)
+
 
 class TestBotoImport:
     def test_missing_boto3_raises_helpful_error(
@@ -156,3 +168,37 @@ class TestBotoImport:
         monkeypatch.setattr(builtins, "__import__", fake_import)
         with pytest.raises(ImportError, match=r"pip install konfig\[aws\]"):
             AwsSettingsLayer(ARN)  # no client injected -> tries boto3
+
+
+class TestRegionSelection:
+    def test_region_extracted_from_arn(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # ARN source -> region extracted and passed to boto3.client()
+        call_args: dict[str, Any] = {}
+
+        def recording_client_func(service: str, region_name: str | None = None) -> Any:
+            call_args["service"] = service
+            call_args["region_name"] = region_name
+            return FakeSMClient(json.dumps(TREE))
+
+        fake_boto3 = SimpleNamespace(client=recording_client_func)
+        monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+        AwsSettingsLayer(ARN)
+        assert call_args["service"] == "secretsmanager"
+        assert call_args["region_name"] == "eu-west-1"
+
+    def test_region_none_for_plain_secret_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Plain secret name (not ARN) -> region_name=None (uses default provider chain)
+        call_args: dict[str, Any] = {}
+
+        def recording_client_func(service: str, region_name: str | None = None) -> Any:
+            call_args["service"] = service
+            call_args["region_name"] = region_name
+            return FakeSMClient(json.dumps(TREE))
+
+        fake_boto3 = SimpleNamespace(client=recording_client_func)
+        monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+        AwsSettingsLayer("myapp/settings")
+        assert call_args["service"] == "secretsmanager"
+        assert call_args["region_name"] is None

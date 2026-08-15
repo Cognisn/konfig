@@ -62,7 +62,8 @@ class AwsSettingsLayer:
         """Re-fetch the settings document from AWS.
 
         Raises:
-            RuntimeError: If the secret is missing or unreadable.
+            RuntimeError: If the secret is missing, unreadable, or any other
+                exception occurs during fetch (botocore errors, credential issues, etc).
             ValueError: If the payload is binary-only, not valid JSON, or
                 not a JSON object at the top level.
         """
@@ -71,9 +72,10 @@ class AwsSettingsLayer:
         logger.debug("Fetching AWS settings secret %s", self._source)
         try:
             response = self._client.get_secret_value(SecretId=self._source)
-        except self._client.exceptions.ClientError as exc:
-            # Covers ResourceNotFoundException, AccessDenied, etc. The
-            # message names the secret; there is no payload to leak here.
+        except Exception as exc:
+            # Covers ClientError subclasses (ResourceNotFoundException, AccessDenied),
+            # as well as botocore failures (NoCredentialsError, EndpointConnectionError).
+            # The message names the secret; there is no payload to leak here.
             raise RuntimeError(
                 f"Cannot read AWS settings secret {self._source!r}: {exc}"
             ) from exc
