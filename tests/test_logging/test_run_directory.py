@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-
 from konfig.logging.run_directory import (
     cleanup_old_runs,
     create_run_directory,
