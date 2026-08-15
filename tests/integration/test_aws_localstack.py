@@ -121,3 +121,55 @@ def test_bundle_backend_full_crud_round_trip(
     )
     assert "api_key" not in stored_after
     assert stored_after == {"db_password": "pw-123"}
+
+
+@pytest.fixture
+def settings_arn() -> Iterator[str]:
+    """Create a settings-document secret and yield its ARN; delete on teardown."""
+    client = _client()
+    name = f"konfig-itest-settings/{uuid.uuid4().hex}"
+    document = {"database": {"host": "aws-db", "port": 5432}, "flags": ["x", "y"]}
+    response = client.create_secret(Name=name, SecretString=json.dumps(document))
+    arn = response["ARN"]
+    try:
+        yield arn
+    finally:
+        try:
+            client.delete_secret(SecretId=arn, ForceDeleteWithoutRecovery=True)
+        except Exception:  # best-effort cleanup; never mask the test result
+            pass
+
+
+def test_settings_layer_via_env_var(
+    settings_arn: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from konfig import Settings
+
+    monkeypatch.setenv("KONFIG_AWS_SETTINGS", settings_arn)
+    settings = Settings(defaults={"database": {"host": "default-db"}})
+
+    # The AWS document overrides defaults; list values arrive intact.
+    assert settings.get("database.host") == "aws-db"
+    assert settings.get("database.port") == 5432
+    assert settings.get("flags") == ["x", "y"]
+    assert settings.get_section("database") == {"host": "aws-db", "port": 5432}
+
+    # reload() picks up a rotated document without a restart.
+    _client().put_secret_value(
+        SecretId=settings_arn,
+        SecretString=json.dumps({"database": {"host": "rotated-db"}}),
+    )
+    settings.reload()
+    assert settings.get("database.host") == "rotated-db"
+
+
+def test_settings_layer_missing_secret_fails_fast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from konfig import Settings
+
+    monkeypatch.setenv(
+        "KONFIG_AWS_SETTINGS", f"konfig-itest-missing/{uuid.uuid4().hex}"
+    )
+    with pytest.raises(RuntimeError, match="konfig-itest-missing"):
+        Settings()
