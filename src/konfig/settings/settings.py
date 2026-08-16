@@ -52,7 +52,9 @@ class Settings:
             SecretString is a JSON object holding the settings tree. The
             KONFIG_AWS_SETTINGS environment variable overrides this
             argument. Read-only; requires konfig[aws]. Errors reading or
-            parsing the secret raise immediately at construction.
+            parsing the secret raise immediately at construction. An empty
+            store is seeded with the defaults tree on first boot (see
+            KONFIG_AWS_SEED).
     """
 
     def __init__(
@@ -83,7 +85,7 @@ class Settings:
         # The env var is a hard override, mirroring KONFIG_AWS_SECRETS_MANAGER
         # on the secrets side.
         aws_source = os.environ.get("KONFIG_AWS_SETTINGS") or aws_settings
-        self._aws_layer = AwsSettingsLayer(aws_source)
+        self._aws_layer = AwsSettingsLayer(aws_source, defaults=defaults)
 
     def get(
         self,
