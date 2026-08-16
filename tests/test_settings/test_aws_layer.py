@@ -33,11 +33,14 @@ class FakeSMClient:
         secret_string: str | None = None,
         missing: bool = False,
         error: bool = False,
+        put_error: bool = False,
     ) -> None:
         self._secret_string = secret_string
         self._missing = missing
         self._error = error
+        self._put_error = put_error
         self.get_calls = 0
+        self.put_calls: list[str] = []
         self.exceptions = SimpleNamespace(
             ClientError=_ClientError, ResourceNotFoundException=_ResourceNotFound
         )
@@ -51,6 +54,12 @@ class FakeSMClient:
         if self._secret_string is None:
             return {}  # binary-only secret: no SecretString key
         return {"SecretString": self._secret_string}
+
+    def put_secret_value(self, SecretId: str, SecretString: str) -> None:
+        if self._put_error:
+            raise self.exceptions.ClientError("access denied on put")
+        self.put_calls.append(SecretString)
+        self._secret_string = SecretString
 
 
 class TestInertWhenUnconfigured:
@@ -358,3 +367,83 @@ class TestSecretUriComposition:
         raw = settings.get("database.password")
         assert raw == "secret://db_password"
         assert secrets.resolve_uri(raw) == "pw-123"
+
+
+class TestSettingsDocumentSeeding:
+    """First-boot seeding of an empty KONFIG_AWS_SETTINGS store (issue #7)."""
+
+    DEFAULTS = {"database": {"host": "localhost", "port": 5432}, "flags": ["a"]}
+
+    @pytest.mark.parametrize("payload", ["", "   \n\t", "{}", " {} "])
+    def test_empty_payload_seeds_defaults(self, payload: str) -> None:
+        client = FakeSMClient(payload)
+        layer = AwsSettingsLayer(ARN, client=client, defaults=self.DEFAULTS)
+        assert layer.data == {}  # reads fall through to the defaults layer
+        assert len(client.put_calls) == 1
+        assert json.loads(client.put_calls[0]) == self.DEFAULTS
+
+    def test_seeded_json_is_pretty_printed(self) -> None:
+        client = FakeSMClient("{}")
+        AwsSettingsLayer(ARN, client=client, defaults=self.DEFAULTS)
+        assert "\n" in client.put_calls[0]  # indent=2, not a single line
+
+    def test_seed_disabled_by_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("KONFIG_AWS_SEED", "false")
+        client = FakeSMClient("{}")
+        layer = AwsSettingsLayer(ARN, client=client, defaults=self.DEFAULTS)
+        assert layer.data == {}
+        assert client.put_calls == []
+
+    def test_no_defaults_nothing_to_seed(self) -> None:
+        client = FakeSMClient("{}")
+        layer = AwsSettingsLayer(ARN, client=client)
+        assert layer.data == {}
+        assert client.put_calls == []
+
+    def test_seed_write_failure_warns_and_continues(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        client = FakeSMClient("{}", put_error=True)
+        with caplog.at_level("WARNING", logger="konfig.settings.aws_layer"):
+            layer = AwsSettingsLayer(ARN, client=client, defaults=self.DEFAULTS)
+        assert layer.data == {}
+        assert any("Could not seed" in r.message for r in caplog.records)
+
+    def test_unserialisable_defaults_warn_and_continue(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        client = FakeSMClient("{}")
+        with caplog.at_level("WARNING", logger="konfig.settings.aws_layer"):
+            layer = AwsSettingsLayer(ARN, client=client, defaults={"bad": object()})
+        assert layer.data == {}
+        assert client.put_calls == []
+        assert any("Could not seed" in r.message for r in caplog.records)
+
+    def test_non_empty_store_never_written(self) -> None:
+        client = FakeSMClient(json.dumps(TREE))
+        layer = AwsSettingsLayer(ARN, client=client, defaults=self.DEFAULTS)
+        assert layer.data == TREE
+        assert client.put_calls == []
+
+    def test_malformed_payload_still_fails_fast_without_write(self) -> None:
+        client = FakeSMClient("not-json{")
+        with pytest.raises(ValueError):
+            AwsSettingsLayer(ARN, client=client, defaults=self.DEFAULTS)
+        assert client.put_calls == []
+
+    def test_missing_secret_still_fails_fast_without_write(self) -> None:
+        client = FakeSMClient(missing=True)
+        with pytest.raises(RuntimeError):
+            AwsSettingsLayer(ARN, client=client, defaults=self.DEFAULTS)
+        assert client.put_calls == []
+
+    def test_settings_passes_defaults_and_reads_fall_through(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from konfig.settings.settings import Settings
+
+        client = FakeSMClient("{}")
+        monkeypatch.setattr(AwsSettingsLayer, "_create_client", lambda self: client)
+        settings = Settings(defaults=self.DEFAULTS, aws_settings=ARN)
+        assert settings.get("database.host") == "localhost"  # defaults layer
+        assert json.loads(client.put_calls[0]) == self.DEFAULTS

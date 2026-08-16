@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from konfig.secrets.backend import SecretBackend
 from konfig.secrets.encrypted_file import EncryptedFileBackend
@@ -14,6 +14,34 @@ if TYPE_CHECKING:
     from konfig.settings.settings import Settings
 
 logger = logging.getLogger(__name__)
+
+# Written into empty bundle stores by seed_from; greppable on purpose. Also
+# load-bearing for the resolution warning below — change it only deliberately.
+PLACEHOLDER_SECRET_VALUE = "CHANGEME"
+
+
+def find_secret_refs(data: Any) -> list[str]:
+    """Collect secret names referenced as ``secret://<name>`` values.
+
+    Recursively scans nested dicts and lists. Returns the unique names,
+    sorted; nameless references (``secret://``) are ignored.
+    """
+    names: set[str] = set()
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for value in node.values():
+                _walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                _walk(value)
+        elif isinstance(node, str) and node.startswith("secret://"):
+            name = node[len("secret://") :]
+            if name:
+                names.add(name)
+
+    _walk(data)
+    return sorted(names)
 
 
 class Secrets:
@@ -106,9 +134,19 @@ class Secrets:
             prefix = self._settings.get("secrets.aws.prefix", "")
         return AWSSecretsManagerBackend(region=region, prefix=prefix)
 
+    def _warn_if_placeholder(self, key: str, value: str | None) -> str | None:
+        if value == PLACEHOLDER_SECRET_VALUE:
+            logger.warning(
+                "Secret %r is still the unpopulated placeholder %r; set a real "
+                "value in the secrets store",
+                key,
+                PLACEHOLDER_SECRET_VALUE,
+            )
+        return value
+
     def get(self, key: str) -> str | None:
         """Retrieve a secret by key."""
-        return self._backend.get(key)
+        return self._warn_if_placeholder(key, self._backend.get(key))
 
     def set(self, key: str, value: str) -> None:
         """Store a secret."""
@@ -137,5 +175,33 @@ class Secrets:
         """
         if isinstance(value, str) and value.startswith("secret://"):
             secret_key = value[len("secret://") :]
-            return self._backend.get(secret_key)
+            return self._warn_if_placeholder(secret_key, self._backend.get(secret_key))
         return value
+
+    def seed_from(self, settings: Settings) -> bool:
+        """Seed an empty AWS bundle store from the effective settings.
+
+        First-boot convenience: when the active backend is the designated
+        AWS Secrets Manager bundle (``KONFIG_AWS_SECRETS_MANAGER``) and its
+        store is empty, write a ``PLACEHOLDER_SECRET_VALUE`` entry for every
+        ``secret://<name>`` reference found in the merged settings, giving
+        the operator a template to populate. A no-op for any other backend,
+        when seeding is disabled via ``KONFIG_AWS_SEED``, when the store is
+        non-empty, or when the settings reference no secrets. ``AppContext``
+        calls this automatically at startup; call it yourself when composing
+        ``Settings`` and ``Secrets`` directly.
+
+        Returns:
+            True when a seed write happened.
+        """
+        from konfig._aws import seeding_enabled
+        from konfig.secrets.aws_bundle_backend import AWSSecretsBundleBackend
+
+        if not isinstance(self._backend, AWSSecretsBundleBackend):
+            return False
+        if not seeding_enabled():
+            return False
+        names = find_secret_refs(settings.to_dict())
+        if not names:
+            return False
+        return self._backend.seed_if_empty(names, PLACEHOLDER_SECRET_VALUE)

@@ -124,3 +124,23 @@ class TestAppContextAsync:
         ) as ctx:
             manager = ctx.log_manager
         assert len(manager._handlers) == 0
+
+
+def test_app_context_calls_seed_from(tmp_path: Path, monkeypatch) -> None:
+    """AppContext wires bundle seeding at startup, after logging is up."""
+    from konfig.secrets.secrets import Secrets
+
+    calls: list[object] = []
+
+    def fake_seed_from(self, settings):
+        calls.append(settings)
+        return False
+
+    monkeypatch.setattr(Secrets, "seed_from", fake_seed_from)
+    with AppContext(
+        name="SeedTest",
+        config_file=tmp_path / "config.yaml",
+        system_config_file=tmp_path / "system.yaml",
+        defaults={"logging": {"log_dir": str(tmp_path / "logs")}},
+    ) as ctx:
+        assert calls == [ctx.settings]

@@ -237,6 +237,23 @@ class EnvLayer:
                 _set_nested(result, remainder, value)
         return result
 
+    def enumerate(self) -> dict[str, Any]:
+        """All settings visible through this layer, as a nested dict.
+
+        Only meaningful when a prefix is configured: enumerating unprefixed
+        variables would sweep in the entire process environment, so an
+        unprefixed layer returns an empty dict.
+        """
+        if not self._prefix:
+            return {}
+        result: dict[str, Any] = {}
+        marker = f"{self._prefix}__"
+        for env_key, value in os.environ.items():
+            if env_key.startswith(marker):
+                remainder = env_key[len(marker) :].lower().replace("__", ".")
+                _set_nested(result, remainder, value)
+        return result
+
     @property
     def data(self) -> dict[str, Any]:
         return {}
