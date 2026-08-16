@@ -173,3 +173,90 @@ def test_settings_layer_missing_secret_fails_fast(
     )
     with pytest.raises(RuntimeError, match="konfig-itest-missing"):
         Settings()
+
+
+@pytest.fixture
+def empty_secret() -> Iterator[str]:
+    """Create a secret holding an empty JSON object; delete on teardown."""
+    client = _client()
+    name = f"konfig-itest-empty/{uuid.uuid4().hex}"
+    response = client.create_secret(Name=name, SecretString="{}")
+    arn = response["ARN"]
+    try:
+        yield arn
+    finally:
+        try:
+            client.delete_secret(SecretId=arn, ForceDeleteWithoutRecovery=True)
+        except Exception:  # best-effort cleanup; never mask the test result
+            pass
+
+
+def test_settings_store_seeded_with_defaults(
+    empty_secret: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from konfig import Settings
+
+    defaults = {"database": {"host": "default-db", "port": 5432}}
+    monkeypatch.setenv("KONFIG_AWS_SETTINGS", empty_secret)
+    settings = Settings(defaults=defaults)
+
+    # Reads resolve exactly as if the layer were absent.
+    assert settings.get("database.host") == "default-db"
+
+    # The store now holds the pretty-printed defaults tree.
+    stored = _client().get_secret_value(SecretId=empty_secret)["SecretString"]
+    assert json.loads(stored) == defaults
+    assert "\n" in stored  # pretty-printed
+
+
+def test_settings_seed_respects_opt_out(
+    empty_secret: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from konfig import Settings
+
+    monkeypatch.setenv("KONFIG_AWS_SETTINGS", empty_secret)
+    monkeypatch.setenv("KONFIG_AWS_SEED", "false")
+    settings = Settings(defaults={"a": 1})
+    assert settings.get("a") == 1
+    stored = _client().get_secret_value(SecretId=empty_secret)["SecretString"]
+    assert stored == "{}"  # untouched
+
+
+def test_bundle_store_seeded_with_placeholders(
+    empty_secret: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from konfig import Secrets, Settings
+    from konfig.secrets.secrets import PLACEHOLDER_SECRET_VALUE
+
+    monkeypatch.setenv("KONFIG_AWS_SECRETS_MANAGER", empty_secret)
+    settings = Settings(
+        defaults={
+            "database": {"password": "secret://db_password"},
+            "api": {"keys": ["secret://api_key"]},
+        }
+    )
+    secrets = Secrets(settings=settings)
+    assert secrets.seed_from(settings) is True
+
+    stored = json.loads(
+        _client().get_secret_value(SecretId=empty_secret)["SecretString"]
+    )
+    assert stored == {
+        "api_key": PLACEHOLDER_SECRET_VALUE,
+        "db_password": PLACEHOLDER_SECRET_VALUE,
+    }
+    # Resolving the placeholder returns it unmodified (and logs a warning).
+    assert secrets.get("db_password") == PLACEHOLDER_SECRET_VALUE
+
+
+def test_bundle_seed_leaves_populated_store_alone(
+    bundle_arn: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from konfig import Secrets, Settings
+
+    monkeypatch.setenv("KONFIG_AWS_SECRETS_MANAGER", bundle_arn)
+    settings = Settings(defaults={"x": "secret://api_key"})
+    secrets = Secrets(settings=settings)
+    assert secrets.seed_from(settings) is False
+    stored = json.loads(_client().get_secret_value(SecretId=bundle_arn)["SecretString"])
+    assert stored == {"api_key": "sk-seeded"}  # the fixture's original payload
