@@ -25,6 +25,12 @@ class AppContext:
         async with AppContext(name="MyApp") as ctx:
             await do_work(ctx.settings)
 
+    During setup, AppContext performs the following steps:
+    1. Initialise Settings from config file and environment
+    2. Initialise Secrets backend (auto-detect or configured)
+    3. Set up Logging from settings and create run directory
+    4. Seed an empty designated AWS secrets bundle with placeholders
+
     When no ``config_file`` is specified, AppContext searches the
     platform-conventional config directory for a config file
     (config.yaml, config.yml, config.toml, config.json).
@@ -93,6 +99,11 @@ class AppContext:
             app_id=self._app_id,
         )
         self._logger = self._log_manager.setup()
+
+        # First-boot convenience: seed an empty designated AWS secrets bundle
+        # with placeholders for every secret:// reference in the settings.
+        # Runs after logging setup so the seed warnings reach the handlers.
+        self._secrets.seed_from(self._settings)
 
     def _teardown(self) -> None:
         """Clean up all subsystems."""
