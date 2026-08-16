@@ -13,3 +13,4 @@ def _clear_konfig_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.delenv("KONFIG_CONFIG_FORMAT", raising=False)
     monkeypatch.delenv("KONFIG_AWS_SETTINGS", raising=False)
+    monkeypatch.delenv("KONFIG_AWS_SEED", raising=False)
