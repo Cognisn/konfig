@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [0.3.0] - 2026-08-16
+
+### Added
+
+- AWS Secrets Manager settings layer: set `KONFIG_AWS_SETTINGS=<secret ARN or name>` (or pass
+  `Settings(aws_settings=...)`, with the environment variable winning) to load an application's
+  entire settings tree from a single Secrets Manager secret holding a JSON object. The layer sits
+  between environment variables and the user config file in precedence, is read-only, fails fast
+  at startup on a missing/unreadable secret or malformed payload, and is re-fetched only on
+  `reload()`. Requires `konfig[aws]`; `secret://` values inside the document resolve through the
+  active secrets backend as usual.
+
+### Fixed
+
+- PyPI publish workflow: updated the pinned `pypa/gh-action-pypi-publish` to v1.14.2 so wheels
+  carrying Metadata-Version 2.5 are accepted, and added a `workflow_dispatch` trigger so a failed
+  publish can be re-run from `main`.
+
 ## [0.2.1] - 2026-07-13
 
 ### Fixed
