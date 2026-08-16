@@ -271,3 +271,63 @@ class TestConfigFormatSelection:
         monkeypatch.setenv("KONFIG_CONFIG_FORMAT", "xml")
         with pytest.raises(ValueError, match="KONFIG_CONFIG_FORMAT"):
             Settings(config_file=str(tmp_path / "config.yaml"))
+
+
+class TestToDict:
+    def test_merges_all_layers_in_precedence_order(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config = tmp_path / "config.yaml"
+        config.write_text(
+            "database:\n  host: file-db\n  name: from-file\n", encoding="utf-8"
+        )
+        monkeypatch.setenv("MYAPP__DATABASE__PORT", "9999")
+        settings = Settings(
+            config_file=config,
+            defaults={"database": {"host": "default-db", "user": "root"}},
+            env_prefix="MYAPP",
+        )
+        settings.set("database.host", "runtime-db")
+        assert settings.to_dict() == {
+            "database": {
+                "host": "runtime-db",  # runtime beats file beats defaults
+                "name": "from-file",
+                "port": "9999",  # env, string as always
+                "user": "root",  # only in defaults
+            }
+        }
+
+    def test_env_layer_omitted_without_prefix(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DATABASE__HOST", "env-db")
+        settings = Settings(defaults={"database": {"host": "default-db"}})
+        # Unprefixed env enumeration would sweep the whole environment, so
+        # to_dict() omits the env layer entirely in that case.
+        assert settings.to_dict() == {"database": {"host": "default-db"}}
+
+    def test_snapshot_does_not_alias_layer_data(self) -> None:
+        settings = Settings(defaults={"a": {"b": 1}})
+        snapshot = settings.to_dict()
+        snapshot["a"]["b"] = 999
+        assert settings.get("a.b") == 1
+
+
+class TestEnvLayerEnumerate:
+    def test_prefixed_enumeration(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from konfig.settings.layers import EnvLayer
+
+        monkeypatch.setenv("MYAPP__DATABASE__HOST", "env-db")
+        monkeypatch.setenv("MYAPP__LOGGING__LEVEL", "DEBUG")
+        monkeypatch.setenv("OTHERAPP__X", "ignored")
+        layer = EnvLayer("myapp")
+        assert layer.enumerate() == {
+            "database": {"host": "env-db"},
+            "logging": {"level": "DEBUG"},
+        }
+
+    def test_unprefixed_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from konfig.settings.layers import EnvLayer
+
+        monkeypatch.setenv("DATABASE__HOST", "env-db")
+        assert EnvLayer(None).enumerate() == {}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, TypeVar
@@ -204,6 +205,26 @@ class Settings:
         result = _deep_merge(result, self._env_layer.get_section(prefix))
         result = _deep_merge(result, self._runtime_layer.get_section(prefix))
         return result
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the merged effective settings as one nested dict.
+
+        Deep-merges every layer's data in precedence order (lowest to
+        highest): defaults, system file, user file, AWS settings document,
+        environment variables, runtime overrides. The environment layer is
+        included only when an ``env_prefix`` was configured — enumerating
+        unprefixed variables would sweep in the entire process environment.
+        The returned dict is an independent snapshot; mutating it never
+        affects the live layers.
+        """
+        result: dict[str, Any] = {}
+        result = _deep_merge(result, self._defaults_layer.data)
+        result = _deep_merge(result, self._system_file_layer.data)
+        result = _deep_merge(result, self._user_file_layer.data)
+        result = _deep_merge(result, self._aws_layer.data)
+        result = _deep_merge(result, self._env_layer.enumerate())
+        result = _deep_merge(result, self._runtime_layer.data)
+        return copy.deepcopy(result)
 
     def reload(self) -> None:
         """Reload both config files from disk and re-fetch the AWS settings
