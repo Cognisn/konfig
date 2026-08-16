@@ -94,6 +94,32 @@ same secret works, but keeping configuration and secret material in separate
 Secrets Manager entries is recommended so IAM can distinguish "may read
 config" from "may read credentials".
 
+### First boot on AWS: seeded stores
+
+When konfig starts against **empty** stores (an empty or whitespace-only
+`SecretString`, or a bare `{}`), it writes a template for the operator instead
+of leaving them to transcribe documentation:
+
+- The `KONFIG_AWS_SETTINGS` settings secret is seeded with the application's
+  defaults tree as pretty-printed JSON. Startup continues with reads resolving
+  exactly as if the layer were absent.
+- The `KONFIG_AWS_SECRETS_MANAGER` bundle secret is seeded with a `"CHANGEME"`
+  placeholder for every `secret://<name>` reference in the effective settings.
+  Resolving an unpopulated placeholder logs a warning naming the key.
+  `AppContext` runs this automatically at startup; when composing `Settings`
+  and `Secrets` yourself, call `secrets.seed_from(settings)`.
+
+The intended first-boot flow: create the two (empty) secrets, grant
+`secretsmanager:PutSecretValue` on them for first boot, start once, edit the
+seeded documents, restart — and optionally drop the write grant again.
+
+Seeding never touches a non-empty store (malformed payloads keep failing
+fast, and partial documents are never merged into), never creates secrets,
+and a failed seed write (for example `AccessDenied` under a read-only role)
+only logs a warning. Concurrent replicas racing the first boot are benign:
+every writer writes identical content. Operators who want no write attempt at
+all can disable seeding outright with `KONFIG_AWS_SEED=false`.
+
 ### Running the LocalStack integration tests
 
 The AWS integrations have opt-in integration tests that run against a local

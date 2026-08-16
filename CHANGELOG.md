@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- First-boot seeding of empty AWS Secrets Manager stores: an empty `KONFIG_AWS_SETTINGS`
+  secret is seeded with the application's defaults tree as pretty-printed JSON, and an empty
+  `KONFIG_AWS_SECRETS_MANAGER` bundle is seeded with `CHANGEME` placeholders for every
+  `secret://` reference in the effective settings (via `Secrets.seed_from`, wired into
+  `AppContext`). Resolving an unpopulated placeholder logs a warning naming the key.
+  Non-empty stores are never written to; disable with `KONFIG_AWS_SEED=false`.
+- `Settings.to_dict()` returning the merged effective settings as one nested dict.
+
 ## [0.3.0] - 2026-08-16
 
 ### Added
