@@ -61,6 +61,9 @@ def _aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
     monkeypatch.setenv("AWS_DEFAULT_REGION", REGION)
     monkeypatch.setenv("AWS_ENDPOINT_URL", ENDPOINT_URL)
+    # Isolate KONFIG_AWS_SEED from developer shell opt-outs that would break
+    # the seeding tests that expect it set explicitly.
+    monkeypatch.delenv("KONFIG_AWS_SEED", raising=False)
 
 
 def _client():

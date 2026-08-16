@@ -102,7 +102,8 @@ class AppContext:
 
         # First-boot convenience: seed an empty designated AWS secrets bundle
         # with placeholders for every secret:// reference in the settings.
-        # Runs after logging setup so the seed warnings reach the handlers.
+        # Bundle seed warnings reach the handlers; settings-store seed warning
+        # fires during Settings construction (before logging setup) via stderr.
         self._secrets.seed_from(self._settings)
 
     def _teardown(self) -> None:
