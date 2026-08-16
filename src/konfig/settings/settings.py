@@ -205,7 +205,9 @@ class Settings:
 
     def reload(self) -> None:
         """Reload both config files from disk and re-fetch the AWS settings
-        document (when configured)."""
+        document (when configured). If re-fetching the AWS document fails, the
+        error propagates and the previously loaded document is retained, whilst
+        config files will already have been reloaded."""
         self._system_file_layer.reload()
         self._user_file_layer.reload()
         self._aws_layer.reload()

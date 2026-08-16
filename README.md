@@ -94,11 +94,11 @@ same secret works, but keeping configuration and secret material in separate
 Secrets Manager entries is recommended so IAM can distinguish "may read
 config" from "may read credentials".
 
-### Running the LocalStack integration test
+### Running the LocalStack integration tests
 
-The AWS bundle backend has an opt-in integration test that runs against a local
-[LocalStack](https://www.localstack.cloud/) container (no AWS account needed). It
-auto-skips when LocalStack is not running, so it never affects the normal test run.
+The AWS integrations have opt-in integration tests that run against a local
+[LocalStack](https://www.localstack.cloud/) container (no AWS account needed). They
+auto-skip when LocalStack is not running, so they never affect the normal test run.
 
 ```bash
 docker compose up -d         # start LocalStack
