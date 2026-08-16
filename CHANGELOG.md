@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-16
+
 ### Added
 
 - First-boot seeding of empty AWS Secrets Manager stores: an empty `KONFIG_AWS_SETTINGS`
