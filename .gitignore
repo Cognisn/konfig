@@ -24,3 +24,22 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+
+# --- Scratch (local only) ---
+_working/
+
+# --- Secrets and local environment ---
+.env
+.env.*
+!.env.example
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+
+# --- Extra Python caches ---
+.ruff_cache/
+venv/
