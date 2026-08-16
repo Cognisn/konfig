@@ -116,3 +116,54 @@ class AWSSecretsBundleBackend(SecretBackend):
 
     def list_keys(self) -> list[str]:
         return list(self._bundle().keys())
+
+    def seed_if_empty(self, names: list[str], placeholder: str) -> bool:
+        """Seed the bundle with placeholder entries when the store is empty.
+
+        Empty means an empty or whitespace-only ``SecretString`` or a bare
+        ``{}``. A missing secret, an unreadable secret, a binary-only secret,
+        or any malformed payload is left untouched — malformed payloads keep
+        failing fast on the read path. Concurrent replicas racing this write
+        are benign: every writer writes the same placeholder map.
+
+        Returns:
+            True when a seed write happened.
+        """
+        if not names:
+            return False
+        try:
+            response = self._client.get_secret_value(SecretId=self._arn)
+        except Exception as exc:
+            logger.warning(
+                "Could not seed AWS secrets bundle %s (unreadable or missing, "
+                "continuing): %s",
+                self._arn,
+                exc,
+            )
+            return False
+        raw = response.get("SecretString")
+        if raw is None:
+            return False  # binary-only secret: not ours to touch
+        if raw.strip():
+            try:
+                if json.loads(raw) != {}:
+                    return False
+            except ValueError:
+                return False  # malformed: the read path fails fast on it
+        try:
+            self._write({name: placeholder for name in names})
+        except Exception as exc:
+            logger.warning(
+                "Could not seed AWS secrets bundle %s with placeholders "
+                "(continuing): %s",
+                self._arn,
+                exc,
+            )
+            return False
+        logger.warning(
+            "Seeded empty AWS secrets bundle %s with %d placeholder entries; "
+            "populate them, then restart",
+            self._arn,
+            len(names),
+        )
+        return True

@@ -200,3 +200,67 @@ class TestBotoImport:
         monkeypatch.setattr(builtins, "__import__", fake_import)
         with pytest.raises(ImportError, match=r"pip install konfig\[aws\]"):
             AWSSecretsBundleBackend(ARN)  # no client injected -> tries boto3
+
+
+class TestSeedIfEmpty:
+    NAMES = ["api_key", "db_password"]
+
+    @pytest.mark.parametrize("payload", ["", "  \n", "{}", " {} "])
+    def test_empty_payload_seeds_placeholders(self, payload: str) -> None:
+        client = FakeSMClient(payload)
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        assert backend.seed_if_empty(self.NAMES, "CHANGEME") is True
+        assert json.loads(client.put_calls[-1]) == {
+            "api_key": "CHANGEME",
+            "db_password": "CHANGEME",
+        }
+
+    def test_non_empty_payload_untouched(self) -> None:
+        client = FakeSMClient(json.dumps({"existing": "value"}))
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        assert backend.seed_if_empty(self.NAMES, "CHANGEME") is False
+        assert client.put_calls == []
+
+    def test_malformed_payload_untouched(self) -> None:
+        client = FakeSMClient("not-json{")
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        assert backend.seed_if_empty(self.NAMES, "CHANGEME") is False
+        assert client.put_calls == []
+
+    def test_binary_secret_untouched(self) -> None:
+        client = FakeSMClient(secret_string=None)
+        # FakeSMClient returns {"SecretString": None}; treat as binary/absent.
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        assert backend.seed_if_empty(self.NAMES, "CHANGEME") is False
+        assert client.put_calls == []
+
+    def test_missing_secret_warns_and_continues(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        client = FakeSMClient(missing=True)
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        with caplog.at_level("WARNING", logger="konfig.secrets.aws_bundle_backend"):
+            assert backend.seed_if_empty(self.NAMES, "CHANGEME") is False
+        assert client.put_calls == []
+        assert any("Could not seed" in r.message for r in caplog.records)
+
+    def test_no_names_is_noop_without_fetch(self) -> None:
+        client = FakeSMClient("{}")
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+        assert backend.seed_if_empty([], "CHANGEME") is False
+        assert client.get_calls == 0
+        assert client.put_calls == []
+
+    def test_seed_write_failure_warns_and_continues(
+        self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = FakeSMClient("{}")
+        backend = AWSSecretsBundleBackend(ARN, client=client)
+
+        def failing_put(SecretId: str, SecretString: str) -> None:
+            raise RuntimeError("access denied")
+
+        monkeypatch.setattr(client, "put_secret_value", failing_put)
+        with caplog.at_level("WARNING", logger="konfig.secrets.aws_bundle_backend"):
+            assert backend.seed_if_empty(self.NAMES, "CHANGEME") is False
+        assert any("Could not seed" in r.message for r in caplog.records)

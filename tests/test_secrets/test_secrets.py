@@ -162,3 +162,155 @@ class TestEnvVarBundleSelection:
 
         Secrets(settings=settings)
         assert captured["ttl"] == 60
+
+
+class TestFindSecretRefs:
+    def test_scans_nested_dicts_and_lists(self) -> None:
+        from konfig.secrets.secrets import find_secret_refs
+
+        data = {
+            "database": {"password": "secret://db_password"},
+            "apis": [
+                {"key": "secret://api_key"},
+                "secret://api_key",  # duplicate
+                "plain-string",
+                42,
+            ],
+            "empty_ref": "secret://",  # nameless: ignored
+        }
+        assert find_secret_refs(data) == ["api_key", "db_password"]
+
+    def test_no_refs(self) -> None:
+        from konfig.secrets.secrets import find_secret_refs
+
+        assert find_secret_refs({"a": 1, "b": ["x"]}) == []
+
+
+class _RecordingBundleBackend:
+    """Stands in for AWSSecretsBundleBackend in seed_from routing tests."""
+
+    def __init__(self) -> None:
+        self.seed_calls: list[tuple[list[str], str]] = []
+
+    def seed_if_empty(self, names, placeholder):
+        self.seed_calls.append((list(names), placeholder))
+        return True
+
+
+class TestSeedFrom:
+    def _settings_with_refs(self):
+        from konfig.settings.settings import Settings
+
+        return Settings(defaults={"database": {"password": "secret://db_password"}})
+
+    def test_non_bundle_backend_is_noop(self) -> None:
+        from konfig.secrets.secrets import Secrets
+
+        class FakeBackend(SecretBackend):
+            def get(self, key):
+                return None
+
+            def set(self, key, value):
+                pass
+
+            def delete(self, key):
+                pass
+
+            def has(self, key):
+                return False
+
+            def list_keys(self):
+                return []
+
+        secrets = Secrets(backend=FakeBackend())
+        assert secrets.seed_from(self._settings_with_refs()) is False
+
+    def test_bundle_backend_receives_names_and_placeholder(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from konfig.secrets import aws_bundle_backend
+        from konfig.secrets.secrets import PLACEHOLDER_SECRET_VALUE, Secrets
+
+        monkeypatch.delenv("KONFIG_AWS_SEED", raising=False)  # shell isolation
+        backend = _RecordingBundleBackend()
+        monkeypatch.setattr(
+            aws_bundle_backend, "AWSSecretsBundleBackend", _RecordingBundleBackend
+        )
+        secrets = Secrets(backend=backend)  # type: ignore[arg-type]
+        assert secrets.seed_from(self._settings_with_refs()) is True
+        assert backend.seed_calls == [(["db_password"], PLACEHOLDER_SECRET_VALUE)]
+
+    def test_disabled_by_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from konfig.secrets import aws_bundle_backend
+        from konfig.secrets.secrets import Secrets
+
+        monkeypatch.setenv("KONFIG_AWS_SEED", "false")
+        backend = _RecordingBundleBackend()
+        monkeypatch.setattr(
+            aws_bundle_backend, "AWSSecretsBundleBackend", _RecordingBundleBackend
+        )
+        secrets = Secrets(backend=backend)  # type: ignore[arg-type]
+        assert secrets.seed_from(self._settings_with_refs()) is False
+        assert backend.seed_calls == []
+
+    def test_no_refs_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from konfig.secrets import aws_bundle_backend
+        from konfig.secrets.secrets import Secrets
+        from konfig.settings.settings import Settings
+
+        backend = _RecordingBundleBackend()
+        monkeypatch.setattr(
+            aws_bundle_backend, "AWSSecretsBundleBackend", _RecordingBundleBackend
+        )
+        secrets = Secrets(backend=backend)  # type: ignore[arg-type]
+        assert secrets.seed_from(Settings(defaults={"a": 1})) is False
+        assert backend.seed_calls == []
+
+
+class TestPlaceholderWarning:
+    def _secrets_returning(self, value):
+        from konfig.secrets.secrets import Secrets
+
+        class FakeBackend(SecretBackend):
+            def get(self, key):
+                return value
+
+            def set(self, key, v):
+                pass
+
+            def delete(self, key):
+                pass
+
+            def has(self, key):
+                return True
+
+            def list_keys(self):
+                return []
+
+        return Secrets(backend=FakeBackend())
+
+    def test_get_warns_on_placeholder(self, caplog: pytest.LogCaptureFixture) -> None:
+        from konfig.secrets.secrets import PLACEHOLDER_SECRET_VALUE
+
+        secrets = self._secrets_returning(PLACEHOLDER_SECRET_VALUE)
+        with caplog.at_level("WARNING", logger="konfig.secrets.secrets"):
+            assert secrets.get("db_password") == PLACEHOLDER_SECRET_VALUE
+        assert any("db_password" in r.message for r in caplog.records)
+
+    def test_resolve_uri_warns_on_placeholder(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from konfig.secrets.secrets import PLACEHOLDER_SECRET_VALUE
+
+        secrets = self._secrets_returning(PLACEHOLDER_SECRET_VALUE)
+        with caplog.at_level("WARNING", logger="konfig.secrets.secrets"):
+            assert (
+                secrets.resolve_uri("secret://db_password") == PLACEHOLDER_SECRET_VALUE
+            )
+        assert any("db_password" in r.message for r in caplog.records)
+
+    def test_real_value_does_not_warn(self, caplog: pytest.LogCaptureFixture) -> None:
+        secrets = self._secrets_returning("real-value")
+        with caplog.at_level("WARNING", logger="konfig.secrets.secrets"):
+            assert secrets.get("db_password") == "real-value"
+        assert caplog.records == []
