@@ -55,6 +55,45 @@ secrets.set("api_key", "sk-new")  # read-modify-write back to the bundle
 
 Requires `pip install konfig[aws]`.
 
+### AWS Secrets Manager settings document (`KONFIG_AWS_SETTINGS`)
+
+Deliver an application's entire configuration as one JSON document held in a
+single Secrets Manager secret — no config file or per-setting environment
+variables needed in the task definition:
+
+```bash
+export KONFIG_AWS_SETTINGS=arn:aws:secretsmanager:eu-west-1:123456789012:secret:myapp/settings-AbCdEf
+```
+
+The secret's `SecretString` must be a JSON object holding the same nested
+settings tree a config file would. A plain secret name is also accepted; the
+region then comes from the default AWS provider chain (with an ARN it is
+taken from the ARN). An equivalent constructor argument exists for
+programmatic use — `Settings(aws_settings=...)` — with the environment
+variable winning when both are set. Requires `pip install konfig[aws]`.
+
+Precedence (highest to lowest):
+`runtime -> env vars -> AWS settings -> user file -> system file -> defaults`
+— environment variables remain the operator's immediate per-container
+override, while the AWS document overrides anything baked into the image.
+
+Behaviour:
+
+- **Read-only.** `settings.set(...)` keeps writing to the runtime layer or
+  config files exactly as before.
+- **Fail fast.** A missing/unreadable secret, non-JSON payload, or
+  non-object top level raises at startup rather than silently degrading to
+  defaults. Error messages name the secret, never its payload.
+- **Fetched once.** The document is read at construction and only re-fetched
+  by `settings.reload()`; there is no background polling.
+- **Composes with secrets.** Values in the document may be `secret://` URIs,
+  resolved as usual by the active secrets backend.
+
+This is independent of `KONFIG_AWS_SECRETS_MANAGER`. Pointing both at the
+same secret works, but keeping configuration and secret material in separate
+Secrets Manager entries is recommended so IAM can distinguish "may read
+config" from "may read credentials".
+
 ### Running the LocalStack integration test
 
 The AWS bundle backend has an opt-in integration test that runs against a local
