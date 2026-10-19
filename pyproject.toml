@@ -55,6 +55,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
     "localstack: integration tests requiring a running LocalStack container (auto-skipped if unavailable)",
+    "slow: multi-process tests that take a few seconds (run by default; deselect with -m 'not slow')",
 ]
 
 [tool.mypy]
