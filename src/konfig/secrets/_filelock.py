@@ -123,6 +123,19 @@ class FileLock:
         """Hold an exclusive (write) lock."""
         return self._acquire(exclusive=True)
 
+    @contextmanager
+    def thread_guard(self) -> Iterator[None]:
+        """Exclude other threads in this process without taking the OS lock.
+
+        Locks taken inside the guard by the same thread nest normally.
+        """
+        if not self._state.rlock.acquire(timeout=max(self._timeout, 0)):
+            raise self._timeout_error()
+        try:
+            yield
+        finally:
+            self._state.rlock.release()
+
     def _timeout_error(self) -> TimeoutError:
         return TimeoutError(
             f"Timed out after {self._timeout:g}s waiting for the lock on "
