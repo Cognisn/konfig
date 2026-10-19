@@ -302,10 +302,10 @@ class EncryptedFileBackend(SecretBackend):
         data: dict[str, str] = json.loads(plaintext.decode("utf-8"))
         return data
 
-    def _encode(self) -> bytes:
-        """Encrypt the cache in format v2, keeping the file's salt."""
+    def _encode(self, data: dict[str, str]) -> bytes:
+        """Encrypt ``data`` in format v2, keeping the file's salt."""
         fernet_key, key_id = self._keys_for(self._salt)
-        token = Fernet(fernet_key).encrypt(json.dumps(self._data).encode("utf-8"))
+        token = Fernet(fernet_key).encrypt(json.dumps(data).encode("utf-8"))
         return _MAGIC + bytes([_VERSION_V2]) + key_id + self._salt + token
 
     # -- file I/O (callers hold the lock) ------------------------------------
@@ -330,11 +330,11 @@ class EncryptedFileBackend(SecretBackend):
         self._data = self._decode(raw)
         self._signature = signature
 
-    def _write_file(self) -> None:
-        """Encrypt the cache and atomically replace the file with it."""
+    def _write_file(self, data: dict[str, str]) -> None:
+        """Atomically replace the file with ``data``, then adopt it as the cache."""
         directory = self._path.parent
         directory.mkdir(parents=True, exist_ok=True)
-        payload = self._encode()
+        payload = self._encode(data)
 
         tmp = directory / f".{self._path.name}.{_secrets_mod.token_hex(8)}.tmp"
         try:
@@ -347,18 +347,21 @@ class EncryptedFileBackend(SecretBackend):
                 pass
             raise
         _fsync_directory(directory)
+        self._data = data
         self._signature = _signature(os.stat(self._path))
 
     def _transact(self, mutate: Callable[[dict[str, str]], bool]) -> None:
         """Run a locked read-modify-write against the file on disk.
 
-        ``mutate`` changes the freshly loaded data in place and returns
-        whether anything changed; the file is rewritten only if it did.
+        ``mutate`` changes a copy of the freshly loaded data in place and
+        returns whether anything changed; the file is rewritten only if it
+        did. The cache is updated only once the write has succeeded.
         """
         with self._lock.exclusive():
             self._read_file()
-            if mutate(self._data):
-                self._write_file()
+            data = dict(self._data)
+            if mutate(data):
+                self._write_file(data)
 
     def _ensure_fresh(self) -> None:
         """Reload if the file has changed since it was last read or written."""

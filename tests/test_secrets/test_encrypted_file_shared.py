@@ -185,6 +185,7 @@ class TestCrashSafety:
         with pytest.raises(OSError, match="simulated crash"):
             backend.set("key", "updated")
         monkeypatch.undo()
+        assert backend.get("key") == "original"  # failed write not cached
 
         assert sorted(p.name for p in tmp_path.iterdir()) == [
             "secrets.enc",
