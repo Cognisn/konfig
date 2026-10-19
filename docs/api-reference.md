@@ -102,6 +102,13 @@ Check if a secret exists.
 
 List all stored secret keys.
 
+#### `refresh() -> None`
+
+Make the next read see the active backend's current data by delegating to the backend's
+`refresh()`. For the encrypted file backend this reloads the file under a shared lock, which
+also forces NFS clients (including Amazon EFS) to revalidate; for the AWS bundle backend it
+drops the TTL cache. A no-op for backends that do not cache.
+
 #### `resolve_uri(value) -> str | None`
 
 Resolve a `secret://` URI to its actual value. Non-secret strings pass through unchanged.
@@ -199,6 +206,13 @@ Abstract interface for secret storage backends.
 #### `has(key) -> bool`
 #### `list_keys() -> list[str]`
 
+### Methods
+
+#### `refresh() -> None`
+
+Discard any cached state so the next read sees the store's current data. Concrete and a
+no-op by default, so existing backends need no change; override it in backends that cache.
+
 ---
 
 ## konfig.secrets.EncryptedFileBackend
@@ -207,12 +221,28 @@ Abstract interface for secret storage backends.
 class EncryptedFileBackend(
     file_path: Path | str,
     master_key: str | None = None,
+    lock_timeout: float = 30.0,
 )
 ```
 
-AES-256 encrypted JSON file backend. Implements `SecretBackend`.
+AES-256 encrypted JSON file backend. Implements `SecretBackend`. Safe to share between
+processes and containers; see [Sharing an encrypted file](secrets.md#sharing-an-encrypted-file-between-processes-and-containers).
 
-Master key resolution: explicit parameter -> `KONFIG_MASTER_KEY` env var -> auto-generated `.key` file.
+Master key resolution: explicit parameter -> `KONFIG_MASTER_KEY` env var -> existing `.key`
+file -> auto-generated `.key` file (only when the secrets file does not exist yet; otherwise
+`MasterKeyMissingError`).
+
+- `lock_timeout`: seconds to wait for the `<file_path>.lock` lock before raising `TimeoutError`.
+  Set from `secrets.file_lock_timeout` when created by `Secrets`.
+- `refresh()`: unconditionally reload the file under a shared lock.
+
+Errors (from `konfig.secrets`, all subclasses of `EncryptedFileError`):
+
+| Error | Raised when |
+|-------|-------------|
+| `MasterKeyMissingError` | No master key is available for an existing, non-empty secrets file |
+| `MasterKeyMismatchError` | The master key does not match the file (also an `InvalidToken`) |
+| `SecretsFileCorruptError` | The file is damaged, truncated or an unknown format version (also an `InvalidToken`) |
 
 ---
 

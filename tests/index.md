@@ -11,9 +11,12 @@ Index of the tests in this folder. Keep it current as tests are added, changed, 
 | `test_settings/test_settings.py` | Layered `Settings` facade: precedence merge, CRUD with `persist` scopes, `get_section`, casting, reload, `to_dict()`; `Settings.to_dict()` in seeding. |
 | `test_settings/test_sqlite_store.py` | SQLite settings store: `settings(key, value)` schema, JSON-encoded values, read/update/create parity with YAML/JSON. |
 | `test_settings/test_aws_layer.py` | `AwsSettingsLayer` (stubbed client): inert-when-unconfigured, fetch/cache/reload, fail-fast error taxonomy, region selection, boto3 optionality; plus `Settings` wiring (`KONFIG_AWS_SETTINGS`, precedence, read-only, `secret://` composition); first-boot seeding of empty settings secrets with defaults. |
-| `test_secrets/test_secrets.py` | `Secrets` frontend: backend auto-detection order, settings-driven selection, `secret://` URI resolution, placeholder warning on resolution; `seed_from(settings)`. |
+| `test_secrets/test_secrets.py` | `Secrets` frontend: backend auto-detection order, settings-driven selection, `secret://` URI resolution, placeholder warning on resolution; `seed_from(settings)`.; `refresh()` delegation and the no-op `SecretBackend.refresh()` default. |
 | `test_secrets/test_keyring_backend.py` | OS keyring backend: availability probing and CRUD against the keyring API. |
 | `test_secrets/test_encrypted_file.py` | AES-encrypted file backend: master-key handling, round-trip CRUD, file creation. |
+| `test_secrets/test_encrypted_file_shared.py` | Encrypted file as a shared store: multi-process lost updates and concurrent delete/set (spawn, marked `slow`), cross-instance freshness and `refresh()`, thread safety, crash safety on a failed rename, creation-time `0600` permissions, lock timeouts and `secrets.file_lock_timeout` wiring, missing-key refusal, racing first-boot key generation. |
+| `test_secrets/test_encrypted_file_format.py` | Encrypted file format v2 (key identifier header), legacy 0.4.0 compatibility and upgrade on write, wrong-key and corruption errors, PBKDF2 derivation cached per file salt. |
+| `test_secrets/test_filelock.py` | Sidecar advisory file lock: creation mode, re-entrancy, thread and cross-process exclusion, `TimeoutError`, read-only directory fallback. |
 | `test_secrets/test_aws_bundle_backend.py` | AWS designated-secret JSON bundle backend (stubbed client): ARN parsing, TTL read cache, write-through, re-fetch-before-write, boto3 import error; first-boot seeding of empty bundles with `CHANGEME` placeholders for every `secret://` reference. |
 | `test_aws.py` | AWS seeding helpers: `seeding_enabled` detection from `KONFIG_AWS_SEED` environment variable. |
 | `test_logging/test_formatters.py` | Text and JSON log formatters. |

@@ -32,6 +32,7 @@ secrets:
   backend: auto                  # auto, keyring, encrypted_file, aws_secrets_manager
   file_path: ~/.konfig/myapp/secrets.enc  # Path for encrypted file backend
   master_key: null               # Master key (prefer KONFIG_MASTER_KEY env var)
+  file_lock_timeout: 30          # Seconds to wait for the encrypted file lock
   aws:
     region: us-east-1            # AWS region for Secrets Manager
     prefix: myapp                # Prefix for AWS secret names
@@ -42,6 +43,7 @@ secrets:
 | `secrets.backend` | str | Auto-detected | Backend type. If not set, Konfig tries keyring, then encrypted file |
 | `secrets.file_path` | str | Platform default | Path to the encrypted secrets file |
 | `secrets.master_key` | str | From env/auto | Master key for the encrypted file backend |
+| `secrets.file_lock_timeout` | float | `30` | Seconds the encrypted file backend waits for its file lock before raising `TimeoutError` |
 | `secrets.aws.region` | str | `us-east-1` | AWS region for Secrets Manager backend |
 | `secrets.aws.prefix` | str | `""` | Prefix prepended to all secret names in AWS |
 
