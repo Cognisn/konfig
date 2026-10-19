@@ -7,10 +7,15 @@ import platform
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from konfig.logging.formatters import JSONFormatter, TextFormatter
 from konfig.logging.run_directory import cleanup_old_runs, create_run_directory
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from konfig.logging.central import CentralLogging
 
 
 class LogManager:
@@ -64,6 +69,7 @@ class LogManager:
         self._console_output = console_output
         self._run_dir: Optional[Path] = None
         self._handlers: list[logging.Handler] = []
+        self._central: Optional[CentralLogging] = None
 
     @classmethod
     def from_settings(
@@ -179,8 +185,68 @@ class LogManager:
         """The handlers this manager attached to the root logger."""
         return tuple(self._handlers)
 
+    @property
+    def central(self) -> Optional[CentralLogging]:
+        """The running centralised logging role, if any."""
+        return self._central
+
+    def start_central_logging(
+        self,
+        settings: Any,
+        secrets: Any = None,
+        *,
+        environ: Optional[Mapping[str, str]] = None,
+    ) -> bool:
+        """Start centralised log forwarding if ``logging.central`` enables it.
+
+        Call after :meth:`setup`. ``AppContext`` does this automatically.
+        Never raises: any failure is logged locally and the application
+        carries on without forwarding.
+
+        Args:
+            settings: The application's ``Settings``.
+            secrets: The application's ``Secrets``, used to publish or
+                discover the collector and resolve ``secret://`` tokens.
+            environ: Environment mapping; defaults to ``os.environ``.
+
+        Returns:
+            True when this instance is now forwarding or collecting.
+        """
+        if self._central is not None:
+            return True
+        try:
+            from konfig.logging.central import start_central_logging
+
+            self._central = start_central_logging(
+                self, settings, secrets, environ=environ
+            )
+        except Exception as exc:
+            logging.getLogger("konfig.logging.central").warning(
+                "Centralised log forwarding could not start (%s); continuing "
+                "without it",
+                type(exc).__name__,
+            )
+            self._central = None
+        return self._central is not None
+
+    def stop_central_logging(self) -> None:
+        """Stop centralised log forwarding, draining queued records first.
+
+        A no-op when it is not running. Call before :meth:`shutdown`.
+        """
+        central, self._central = self._central, None
+        if central is not None:
+            try:
+                central.stop()
+            except Exception as exc:
+                logging.getLogger("konfig.logging.central").warning(
+                    "Error while stopping centralised log forwarding (%s)",
+                    type(exc).__name__,
+                )
+
     def shutdown(self) -> None:
         """Close and remove all handlers added by this manager."""
+        self.stop_central_logging()
         root = logging.getLogger()
         for handler in self._handlers:
             handler.close()

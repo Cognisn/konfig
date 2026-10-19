@@ -30,6 +30,7 @@ class AppContext:
     2. Initialise Secrets backend (auto-detect or configured)
     3. Set up Logging from settings and create run directory
     4. Seed an empty designated AWS secrets bundle with placeholders
+    5. Start centralised log forwarding when ``logging.central`` enables it
 
     When no ``config_file`` is specified, AppContext searches the
     platform-conventional config directory for a config file
@@ -106,9 +107,15 @@ class AppContext:
         # fires during Settings construction (before logging setup) via stderr.
         self._secrets.seed_from(self._settings)
 
+        # Optional centralised log forwarding (logging.central.*). A no-op
+        # unless enabled; failures are logged and never stop the application.
+        self._log_manager.start_central_logging(self._settings, self._secrets)
+
     def _teardown(self) -> None:
         """Clean up all subsystems."""
         if self._log_manager:
+            # Drain forwarding while the local handlers still exist.
+            self._log_manager.stop_central_logging()
             self._log_manager.shutdown()
 
     def __enter__(self) -> AppContext:
