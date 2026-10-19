@@ -25,6 +25,52 @@ logging:
 | `logging.max_files_per_run` | int | `3` | Maximum number of rotated log files per run |
 | `logging.console_output` | str | `auto` | Where console logs go: `auto` (stderr), `stderr`, or `none` |
 
+## Centralised Log Forwarding
+
+Optional and off by default. See [Centralised Log Forwarding](logging.md#centralised-log-forwarding)
+for the roles, security model and deployment examples. Environment variables win over settings.
+
+```yaml
+logging:
+  central:
+    enabled: false               # sender role
+    collector: false             # collector role (implies enabled)
+    listen: 0.0.0.0:9020         # collector bind address
+    advertise: log-collector:9020
+    level: INFO                  # minimum level forwarded (independent of logging.level)
+    queue_size: 10000
+    store_key: konfig.log_collector
+    flush_timeout: 5
+```
+
+| Key | Env var | Type | Default | Description |
+|-----|---------|------|---------|-------------|
+| `logging.central.enabled` | `KONFIG_LOG_CENTRAL` | bool | `false` | Forward this instance's records to the collector (sender role) |
+| `logging.central.collector` | `KONFIG_LOG_COLLECTOR` | bool | `false` | Nominate this instance as the collector; implies `enabled` |
+| `logging.central.listen` | `KONFIG_LOG_COLLECTOR_LISTEN` | str | `0.0.0.0:9020` | Collector bind address (`host:port`, `[ipv6]:port`) |
+| `logging.central.advertise` | `KONFIG_LOG_COLLECTOR_ADVERTISE` | str | none | Stable name senders connect to, for example `log-collector:9020`; the port defaults to the bound port. Without it, `hostname:port` is advertised with a warning |
+| `logging.central.endpoint` | `KONFIG_LOG_ENDPOINT` | str | none | Sender override of the discovered endpoint |
+| `logging.central.cert_sha256` | `KONFIG_LOG_CERT_SHA256` | str | none | Sender override of the discovered certificate fingerprint (colon-separated or plain hex) |
+| `logging.central.token` | `KONFIG_LOG_TOKEN` | str | none | Sender override of the discovered token; may be a `secret://` reference |
+| `logging.central.instance_label` | `KONFIG_LOG_INSTANCE_LABEL` | str | none | Human label for this instance, for example `worker-3` |
+| `logging.central.level` | | str | `INFO` | Minimum level forwarded, independent of `logging.level` |
+| `logging.central.queue_size` | | int | `10000` | Bounded sender queue; the oldest record is dropped when full |
+| `logging.central.store_key` | | str | `konfig.log_collector` | Secrets store key holding the published collector entry |
+| `logging.central.flush_timeout` | | float | `5` | Seconds a sender drains its queue on shutdown |
+| `logging.central.include_instance_locally` | | bool | `false` | Also add the `instance` block to local JSON logs |
+| `logging.central.max_connections` | | int | `1000` | Collector cap on concurrent sender connections |
+| `logging.central.retention_runs` | | int | `10` | Central run directories the collector keeps |
+| `logging.central.max_file_size_mb` | | int | `100` | Central stream size before rotation |
+| `logging.central.max_files` | | int | `10` | Rotated central stream files kept per run |
+| `logging.central.handshake_timeout` | | float | `10` | Seconds the collector waits for TLS and the hello |
+| `logging.central.idle_timeout` | | float | `300` | Seconds the collector keeps a silent connection open |
+
+The endpoint, fingerprint and token override is all-or-nothing: if any of the three environment
+variables is set, all three must be, otherwise forwarding stays off with a configuration error. The
+settings keys are used only when none of the environment variables is set, under the same rule.
+Boolean environment values accept `1/true/yes/on` and `0/false/no/off` (case-insensitive); any
+other value logs a warning and counts as false.
+
 ## Secrets
 
 ```yaml
@@ -55,6 +101,12 @@ These environment variables are recognised by Konfig:
 |----------|-------------|
 | `KONFIG_MASTER_KEY` | Master key for the encrypted file secrets backend |
 | `<PREFIX>__<KEY>` | Settings override (e.g. `MYAPP__DATABASE__HOST`) |
+| `KONFIG_LOG_CENTRAL` | Enable centralised log forwarding (sender role) |
+| `KONFIG_LOG_COLLECTOR` | Nominate this instance as the log collector |
+| `KONFIG_LOG_COLLECTOR_LISTEN` | Collector bind address |
+| `KONFIG_LOG_COLLECTOR_ADVERTISE` | Stable collector name published to senders |
+| `KONFIG_LOG_ENDPOINT`, `KONFIG_LOG_CERT_SHA256`, `KONFIG_LOG_TOKEN` | Sender override of the discovered collector details (all three or none) |
+| `KONFIG_LOG_INSTANCE_LABEL` | Human label attached to this instance's forwarded records |
 
 ## Example Complete Config
 

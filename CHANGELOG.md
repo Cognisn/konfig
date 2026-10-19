@@ -34,6 +34,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   Files written by 0.4.0 and earlier load unchanged and are upgraded to v2 on their next write.
 - `lock_timeout` argument on `EncryptedFileBackend` and the `secrets.file_lock_timeout` setting
   (default 30 seconds).
+- Optional centralised log forwarding (`konfig.logging.central`), off by default. One instance
+  nominated with `KONFIG_LOG_COLLECTOR` (or `logging.central.collector`) receives records forwarded
+  by every instance with `KONFIG_LOG_CENTRAL` (or `logging.central.enabled`) and writes them, tagged
+  with each sender's identity (hostname, PID, app, version, run, label, and ECS or Kubernetes
+  details), to a central JSON-lines stream under `<log_dir>/central/`. Local logging is unchanged.
+  - The collector generates a self-signed EC P-256 certificate and an access token, keeps them in
+    an owner-only state directory, and publishes the endpoint, certificate fingerprint and token
+    into the shared secrets store (the AWS Secrets Manager bundle or a shared encrypted file), from
+    which senders discover it. `KONFIG_LOG_ENDPOINT`, `KONFIG_LOG_CERT_SHA256` and
+    `KONFIG_LOG_TOKEN` can supply the same details instead (all three or none).
+  - Forwarding is TLS-only with the certificate pinned by its SHA-256 fingerprint, uses
+    newline-delimited JSON (no pickle), and authenticates senders with the token.
+  - Senders queue records in a bounded, drop-oldest queue and ship them from a background thread,
+    so a slow or absent collector never blocks or crashes the application; dropped counts are
+    reported centrally.
+  - `AppContext` starts and stops it automatically; `LogManager.start_central_logging()` and
+    `stop_central_logging()` do the same for applications that compose the parts themselves.
+- `Secrets.backend` property exposing the active backend, and `LogManager` properties `log_dir`,
+  `app_id`, `app_name`, `version`, `handlers` and `central`.
 
 ## [0.4.0] - 2026-08-16
 
