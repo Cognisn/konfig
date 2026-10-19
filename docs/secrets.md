@@ -124,7 +124,7 @@ Many processes and containers can read and write the same encrypted file on a sh
   lock, re-read the file from disk, apply only their own change and save atomically. Processes
   writing different keys never lose each other's changes; for the same key the last writer wins.
 - **Reads see other processes' writes.** `get()`, `has()` and `list_keys()` check the file's
-  inode, size and modification time and reload when it has changed. On NFS-backed storage
+  inode, size, modification time and change time and reload when it has changed. On NFS-backed storage
   (including Amazon EFS) the client attribute cache can delay that check from noticing another
   host's write for a few seconds. Taking the lock forces revalidation, so call `refresh()` (or
   `Secrets.refresh()`) when you must see another host's very latest write, for example for

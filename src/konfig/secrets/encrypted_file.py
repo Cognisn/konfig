@@ -37,8 +37,9 @@ _V2_HEADER_SIZE = len(_MAGIC) + 1 + _KEY_ID_SIZE + _SALT_SIZE
 _OWNER_ONLY = stat.S_IRUSR | stat.S_IWUSR  # 0o600
 _BINARY = getattr(os, "O_BINARY", 0)
 
-# (st_ino, st_size, st_mtime_ns) of the data file, or None when it is absent.
-_Signature = Optional[tuple[int, int, int]]
+# (st_ino, st_size, st_mtime_ns, st_ctime_ns) of the data file, or None when
+# it is absent. ctime catches same-size rewrites that keep or restore mtime.
+_Signature = Optional[tuple[int, int, int, int]]
 
 
 class EncryptedFileError(RuntimeError):
@@ -81,8 +82,8 @@ def _key_id(fernet_key: bytes) -> bytes:
     return hmac.new(raw, _KEY_ID_CONTEXT, hashlib.sha256).digest()[:_KEY_ID_SIZE]
 
 
-def _signature(st: os.stat_result) -> tuple[int, int, int]:
-    return (st.st_ino, st.st_size, st.st_mtime_ns)
+def _signature(st: os.stat_result) -> tuple[int, int, int, int]:
+    return (st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
 
 
 def _create_owner_only(path: Path, data: bytes) -> None:

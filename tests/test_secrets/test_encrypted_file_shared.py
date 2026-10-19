@@ -105,6 +105,33 @@ class TestFreshness:
         path.unlink()
         assert backend.get("key") is None
 
+    def test_reads_notice_same_size_rewrite_with_restored_mtime(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "secrets.enc"
+        writer = EncryptedFileBackend(path, master_key=MASTER_KEY)
+        writer.set("key", "value1")
+        old_bytes = path.read_bytes()
+        writer.set("key", "value2")
+        reader = EncryptedFileBackend(path, master_key=MASTER_KEY)
+        assert reader.get("key") == "value2"
+
+        # Rewrite in place (same inode and size) and put mtime back, so only
+        # the change time differs from what the reader recorded.
+        before = path.stat()
+        with open(path, "r+b") as handle:
+            handle.write(old_bytes)
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+        after = path.stat()
+        assert (after.st_ino, after.st_size, after.st_mtime_ns) == (
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+        )
+        if after.st_ctime_ns == before.st_ctime_ns:
+            pytest.skip("filesystem change time too coarse to observe the rewrite")
+        assert reader.get("key") == "value1"
+
     def test_refresh_forces_reload(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
