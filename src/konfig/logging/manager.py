@@ -52,6 +52,7 @@ class LogManager:
         self._app_name = app_name
         self._version = version
         resolved_app_id = app_id or app_id_from(app_name)
+        self._app_id = resolved_app_id
         self._log_dir = (
             Path(log_dir) if log_dir is not None else platform_log_dir(resolved_app_id)
         )
@@ -154,6 +155,29 @@ class LogManager:
     def run_dir(self) -> Optional[Path]:
         """Path to the current run's log directory."""
         return self._run_dir
+
+    @property
+    def log_dir(self) -> Path:
+        """Base directory holding the run-scoped log directories."""
+        return self._log_dir
+
+    @property
+    def app_id(self) -> str:
+        """Application identifier used for default paths."""
+        return self._app_id
+
+    @property
+    def app_name(self) -> str:
+        return self._app_name
+
+    @property
+    def version(self) -> str:
+        return self._version
+
+    @property
+    def handlers(self) -> tuple[logging.Handler, ...]:
+        """The handlers this manager attached to the root logger."""
+        return tuple(self._handlers)
 
     def shutdown(self) -> None:
         """Close and remove all handlers added by this manager."""
