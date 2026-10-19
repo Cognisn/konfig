@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- Encrypted file backend is now safe to share between processes and containers on a shared
+  mount (Docker named volumes, Amazon EFS, NFS-backed Kubernetes PVCs) using one
+  `KONFIG_MASTER_KEY`:
+  - Stale reads: `get()`, `has()` and `list_keys()` reload the file when another process has
+    changed it, instead of serving the copy loaded at start-up.
+  - Lost updates: `set()` and `delete()` are locked read-modify-write transactions on a sidecar
+    `<file>.lock` (`fcntl.lockf` on POSIX, `msvcrt.locking` on Windows), so processes writing
+    different keys no longer erase each other's changes.
+  - Non-atomic writes: saves go to a temporary file that is `fsync`-ed and renamed into place, so
+    a crash mid-save can no longer truncate the file.
+  - Permission window: the secrets, key and lock files are created with `0600` rather than
+    `chmod`-ed afterwards.
+- A missing master key for an existing secrets file now raises `MasterKeyMissingError` instead of
+  writing a stray key file and failing with a bare `InvalidToken`. Concurrent first-boot
+  processes settle on a single auto-generated key.
+- The PBKDF2 key derivation runs once per file salt rather than on every load and save.
+
+### Added
+
+- `refresh()` on `Secrets` and `SecretBackend` (a no-op by default, so existing custom backends
+  are unaffected) to force the next read to see the store's current data.
+- Encrypted file format v2 with a key identifier, giving a clear `MasterKeyMismatchError` for a
+  wrong master key and `SecretsFileCorruptError` for a damaged file (both also `InvalidToken`).
+  Files written by 0.4.0 and earlier load unchanged and are upgraded to v2 on their next write.
+- `lock_timeout` argument on `EncryptedFileBackend` and the `secrets.file_lock_timeout` setting
+  (default 30 seconds).
+
 ## [0.4.0] - 2026-08-16
 
 ### Added

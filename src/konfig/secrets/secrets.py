@@ -6,6 +6,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, Optional
 
+from konfig.secrets._filelock import DEFAULT_LOCK_TIMEOUT
 from konfig.secrets.backend import SecretBackend
 from konfig.secrets.encrypted_file import EncryptedFileBackend
 from konfig.secrets.keyring_backend import KeyringBackend
@@ -112,9 +113,15 @@ class Secrets:
             if custom_path:
                 file_path = Path(custom_path)
         master_key = None
+        lock_timeout = DEFAULT_LOCK_TIMEOUT
         if self._settings:
             master_key = self._settings.get("secrets.master_key")
-        return EncryptedFileBackend(file_path, master_key=master_key)
+            lock_timeout = self._settings.get(
+                "secrets.file_lock_timeout", DEFAULT_LOCK_TIMEOUT, cast=float
+            )
+        return EncryptedFileBackend(
+            file_path, master_key=master_key, lock_timeout=lock_timeout
+        )
 
     def _create_bundle_backend(self, arn: str) -> SecretBackend:
         from konfig.secrets.aws_bundle_backend import AWSSecretsBundleBackend
@@ -163,6 +170,14 @@ class Secrets:
     def list_keys(self) -> list[str]:
         """List all stored secret keys."""
         return self._backend.list_keys()
+
+    def refresh(self) -> None:
+        """Make the next read see the active backend's current data.
+
+        Delegates to the backend's ``refresh()``; a no-op for backends that
+        do not cache.
+        """
+        self._backend.refresh()
 
     def resolve_uri(self, value: str) -> str | None:
         """Resolve a ``secret://`` URI to the actual secret value.
