@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -13,7 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Optional
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
@@ -24,6 +26,14 @@ logger = logging.getLogger(__name__)
 
 _SALT_SIZE = 16
 _KDF_ITERATIONS = 600_000
+
+# File format v2: magic + version + key identifier + salt + Fernet token.
+# Legacy (0.4.0 and earlier) files are salt + Fernet token, with no header.
+_MAGIC = b"KNFG"
+_VERSION_V2 = 0x02
+_KEY_ID_SIZE = 8
+_KEY_ID_CONTEXT = b"konfig-key-id-v1"
+_V2_HEADER_SIZE = len(_MAGIC) + 1 + _KEY_ID_SIZE + _SALT_SIZE
 _OWNER_ONLY = stat.S_IRUSR | stat.S_IWUSR  # 0o600
 _BINARY = getattr(os, "O_BINARY", 0)
 
@@ -42,6 +52,18 @@ class MasterKeyMissingError(EncryptedFileError):
     """No master key is available for an existing, non-empty secrets file."""
 
 
+class MasterKeyMismatchError(EncryptedFileError, InvalidToken):
+    """The master key does not match the one the secrets file was written with.
+
+    Also an ``InvalidToken``, so code that caught the bare ``cryptography``
+    error raised by earlier versions keeps working.
+    """
+
+
+class SecretsFileCorruptError(EncryptedFileError, InvalidToken):
+    """The secrets file is truncated, damaged or in an unknown format."""
+
+
 def _derive_key(master_key: str, salt: bytes) -> bytes:
     """Derive a Fernet-compatible key from a master key and salt."""
     kdf = PBKDF2HMAC(
@@ -51,6 +73,12 @@ def _derive_key(master_key: str, salt: bytes) -> bytes:
         iterations=_KDF_ITERATIONS,
     )
     return base64.urlsafe_b64encode(kdf.derive(master_key.encode("utf-8")))
+
+
+def _key_id(fernet_key: bytes) -> bytes:
+    """Identify a derived key without revealing it (truncated HMAC-SHA256)."""
+    raw = base64.urlsafe_b64decode(fernet_key)
+    return hmac.new(raw, _KEY_ID_CONTEXT, hashlib.sha256).digest()[:_KEY_ID_SIZE]
 
 
 def _signature(st: os.stat_result) -> tuple[int, int, int]:
@@ -145,7 +173,8 @@ class EncryptedFileBackend(SecretBackend):
         self._salt: bytes = os.urandom(_SALT_SIZE)
         self._signature: _Signature = None
         # PBKDF2 is deliberately slow; derive once per file salt, not per I/O.
-        self._derived_keys: dict[bytes, bytes] = {}
+        # Maps salt -> (Fernet key, key identifier).
+        self._derived_keys: dict[bytes, tuple[bytes, bytes]] = {}
         _check_permissions(self._path)
         self.refresh()
 
@@ -196,13 +225,88 @@ class EncryptedFileBackend(SecretBackend):
         except FileNotFoundError:
             return False
 
-    def _fernet(self, salt: bytes) -> Fernet:
-        """Return a Fernet for ``salt``, deriving its key at most once."""
-        key = self._derived_keys.get(salt)
-        if key is None:
-            key = _derive_key(self._master_key, salt)
-            self._derived_keys[salt] = key
-        return Fernet(key)
+    def _keys_for(self, salt: bytes) -> tuple[bytes, bytes]:
+        """Return (Fernet key, key identifier) for ``salt``, deriving at most once."""
+        cached = self._derived_keys.get(salt)
+        if cached is None:
+            fernet_key = _derive_key(self._master_key, salt)
+            cached = (fernet_key, _key_id(fernet_key))
+            self._derived_keys[salt] = cached
+        return cached
+
+    def _mismatch_error(self) -> MasterKeyMismatchError:
+        return MasterKeyMismatchError(
+            f"The master key does not match the secrets file {self._path}. Every "
+            f"process sharing this file must use the same KONFIG_MASTER_KEY."
+        )
+
+    def _decode(self, raw: bytes) -> dict[str, str]:
+        """Decrypt v2 or legacy file contents, recording the file's salt."""
+        if raw.startswith(_MAGIC):
+            try:
+                salt, plaintext = self._decrypt_v2(raw)
+            except EncryptedFileError:
+                # A legacy file's random salt can begin with the magic bytes
+                # (about 1 in 2**32). Accept it if it decrypts as legacy;
+                # otherwise report the v2 problem.
+                try:
+                    salt, plaintext = self._decrypt_legacy(raw)
+                except EncryptedFileError:
+                    pass
+                else:
+                    self._salt = salt
+                    return self._parse(plaintext)
+                raise
+        else:
+            salt, plaintext = self._decrypt_legacy(raw)
+        self._salt = salt
+        return self._parse(plaintext)
+
+    def _decrypt_v2(self, raw: bytes) -> tuple[bytes, bytes]:
+        if len(raw) <= _V2_HEADER_SIZE:
+            raise SecretsFileCorruptError(
+                f"The secrets file {self._path} is truncated or damaged."
+            )
+        version = raw[len(_MAGIC)]
+        if version != _VERSION_V2:
+            raise SecretsFileCorruptError(
+                f"The secrets file {self._path} uses unsupported format "
+                f"version {version}; it may have been written by a newer konfig."
+            )
+        offset = len(_MAGIC) + 1
+        stored_id = raw[offset : offset + _KEY_ID_SIZE]
+        salt = raw[offset + _KEY_ID_SIZE : _V2_HEADER_SIZE]
+        fernet_key, key_id = self._keys_for(salt)
+        if not hmac.compare_digest(stored_id, key_id):
+            raise self._mismatch_error()
+        try:
+            return salt, Fernet(fernet_key).decrypt(raw[_V2_HEADER_SIZE:])
+        except InvalidToken:
+            raise SecretsFileCorruptError(
+                f"The secrets file {self._path} could not be decrypted; it is "
+                f"damaged or has been tampered with."
+            ) from None
+
+    def _decrypt_legacy(self, raw: bytes) -> tuple[bytes, bytes]:
+        salt = raw[:_SALT_SIZE]
+        fernet_key, _ = self._keys_for(salt)
+        try:
+            return salt, Fernet(fernet_key).decrypt(raw[_SALT_SIZE:])
+        except InvalidToken:
+            # Legacy files carry no key identifier, so a wrong key and damage
+            # look the same; the wrong key is far more likely.
+            raise self._mismatch_error() from None
+
+    @staticmethod
+    def _parse(plaintext: bytes) -> dict[str, str]:
+        data: dict[str, str] = json.loads(plaintext.decode("utf-8"))
+        return data
+
+    def _encode(self) -> bytes:
+        """Encrypt the cache in format v2, keeping the file's salt."""
+        fernet_key, key_id = self._keys_for(self._salt)
+        token = Fernet(fernet_key).encrypt(json.dumps(self._data).encode("utf-8"))
+        return _MAGIC + bytes([_VERSION_V2]) + key_id + self._salt + token
 
     # -- file I/O (callers hold the lock) ------------------------------------
 
@@ -217,25 +321,20 @@ class EncryptedFileBackend(SecretBackend):
             self._signature = None
             return
 
-        if len(raw) < _SALT_SIZE + 1:
+        if not raw.startswith(_MAGIC) and len(raw) < _SALT_SIZE + 1:
+            # Empty (or too short to hold a legacy payload): no secrets yet.
             self._data = {}
             self._signature = signature
             return
 
-        self._salt = raw[:_SALT_SIZE]
-        encrypted = raw[_SALT_SIZE:]
-        fernet = self._fernet(self._salt)
-        decrypted = fernet.decrypt(encrypted)
-        self._data = json.loads(decrypted.decode("utf-8"))
+        self._data = self._decode(raw)
         self._signature = signature
 
     def _write_file(self) -> None:
         """Encrypt the cache and atomically replace the file with it."""
         directory = self._path.parent
         directory.mkdir(parents=True, exist_ok=True)
-        fernet = self._fernet(self._salt)
-        plaintext = json.dumps(self._data).encode("utf-8")
-        payload = self._salt + fernet.encrypt(plaintext)
+        payload = self._encode()
 
         tmp = directory / f".{self._path.name}.{_secrets_mod.token_hex(8)}.tmp"
         try:
