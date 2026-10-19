@@ -164,6 +164,14 @@ class Secrets:
         """List all stored secret keys."""
         return self._backend.list_keys()
 
+    def refresh(self) -> None:
+        """Make the next read see the active backend's current data.
+
+        Delegates to the backend's ``refresh()``; a no-op for backends that
+        do not cache.
+        """
+        self._backend.refresh()
+
     def resolve_uri(self, value: str) -> str | None:
         """Resolve a ``secret://`` URI to the actual secret value.
 

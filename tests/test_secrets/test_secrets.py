@@ -314,3 +314,20 @@ class TestPlaceholderWarning:
         with caplog.at_level("WARNING", logger="konfig.secrets.secrets"):
             assert secrets.get("db_password") == "real-value"
         assert caplog.records == []
+
+
+class TestRefresh:
+    def test_backend_without_override_instantiates_and_refresh_is_noop(
+        self,
+    ) -> None:
+        # InMemoryBackend predates refresh() and does not override it.
+        backend = InMemoryBackend()
+        backend.set("key", "value")
+        backend.refresh()
+        assert backend.get("key") == "value"
+
+    def test_secrets_refresh_delegates_to_backend(self) -> None:
+        backend = MagicMock(spec=SecretBackend)
+        secrets = Secrets(backend=backend)
+        secrets.refresh()
+        backend.refresh.assert_called_once_with()
