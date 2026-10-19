@@ -46,3 +46,11 @@ def churn_keys(
             else:
                 backend.set(f"churn-{i}", f"churn-value-{i}")
         backend.set(f"{'deleter' if deleting else 'setter'}-{round_no}", "done")
+
+
+def first_boot_write(path: str, name: str, start: Event) -> None:
+    """Open a store with no master key configured and write one key."""
+    from konfig.secrets.encrypted_file import EncryptedFileBackend
+
+    start.wait(60)
+    EncryptedFileBackend(Path(path)).set(name, f"value-{name}")

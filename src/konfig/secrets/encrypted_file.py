@@ -31,6 +31,17 @@ _BINARY = getattr(os, "O_BINARY", 0)
 _Signature = Optional[tuple[int, int, int]]
 
 
+class EncryptedFileError(RuntimeError):
+    """Base class for encrypted file backend errors.
+
+    Messages name the secrets file path but never key material or values.
+    """
+
+
+class MasterKeyMissingError(EncryptedFileError):
+    """No master key is available for an existing, non-empty secrets file."""
+
+
 def _derive_key(master_key: str, salt: bytes) -> bytes:
     """Derive a Fernet-compatible key from a master key and salt."""
     kdf = PBKDF2HMAC(
@@ -146,19 +157,44 @@ class EncryptedFileBackend(SecretBackend):
 
         key_file = self._path.with_suffix(".key")
         if key_file.exists():
-            _check_permissions(key_file)
-            return key_file.read_text(encoding="utf-8").strip()
+            return self._read_key_file(key_file)
 
-        logger.warning(
-            "No master key provided and KONFIG_MASTER_KEY is not set. "
-            "Auto-generating a key file at %s. For production use, supply a "
-            "master key via the KONFIG_MASTER_KEY environment variable instead.",
-            key_file,
-        )
-        generated = Fernet.generate_key().decode("utf-8")
-        key_file.parent.mkdir(parents=True, exist_ok=True)
-        _create_owner_only(key_file, generated.encode("utf-8"))
-        return generated
+        # Decide and generate under the exclusive lock, so processes racing
+        # on first boot settle on a single key file.
+        with self._lock.exclusive():
+            if key_file.exists():
+                return self._read_key_file(key_file)
+            if self._data_file_has_content():
+                raise MasterKeyMissingError(
+                    f"No master key is available for the existing secrets file "
+                    f"{self._path}. Set KONFIG_MASTER_KEY (or pass master_key) to "
+                    f"the key it was encrypted with; no key file was generated."
+                )
+            logger.warning(
+                "No master key provided and KONFIG_MASTER_KEY is not set. "
+                "Auto-generating a key file at %s. For production use, supply a "
+                "master key via the KONFIG_MASTER_KEY environment variable instead.",
+                key_file,
+            )
+            generated = Fernet.generate_key().decode("utf-8")
+            key_file.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                _create_owner_only(key_file, generated.encode("utf-8"))
+            except FileExistsError:
+                # Created meanwhile by a process not using the lock.
+                return self._read_key_file(key_file)
+            return generated
+
+    @staticmethod
+    def _read_key_file(key_file: Path) -> str:
+        _check_permissions(key_file)
+        return key_file.read_text(encoding="utf-8").strip()
+
+    def _data_file_has_content(self) -> bool:
+        try:
+            return self._path.stat().st_size > 0
+        except FileNotFoundError:
+            return False
 
     def _fernet(self, salt: bytes) -> Fernet:
         """Return a Fernet for ``salt``, deriving its key at most once."""

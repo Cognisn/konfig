@@ -15,10 +15,15 @@ from pathlib import Path
 
 import pytest
 
-from konfig.secrets.encrypted_file import EncryptedFileBackend
+from konfig.secrets.encrypted_file import EncryptedFileBackend, MasterKeyMissingError
 from konfig.secrets.secrets import Secrets
 from konfig.settings.settings import Settings
-from tests.test_secrets._mp_workers import churn_keys, hold_exclusive_lock, write_keys
+from tests.test_secrets._mp_workers import (
+    churn_keys,
+    first_boot_write,
+    hold_exclusive_lock,
+    write_keys,
+)
 
 MASTER_KEY = "shared-test-master-key"
 
@@ -255,3 +260,29 @@ class TestLockTimeout:
         secrets = Secrets(service_name="test", settings=settings)
         assert isinstance(secrets._backend, EncryptedFileBackend)
         assert secrets._backend._lock._timeout == 2.5
+
+
+class TestMasterKeyHandling:
+    def test_missing_key_for_existing_file_raises_and_creates_no_key_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "secrets.enc"
+        EncryptedFileBackend(path, master_key=MASTER_KEY).set("key", "value")
+        monkeypatch.delenv("KONFIG_MASTER_KEY", raising=False)
+
+        with pytest.raises(MasterKeyMissingError) as excinfo:
+            EncryptedFileBackend(path)
+        assert str(path) in str(excinfo.value)
+        assert not path.with_suffix(".key").exists()
+
+    @pytest.mark.slow
+    def test_racing_first_boot_processes_share_one_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("KONFIG_MASTER_KEY", raising=False)
+        path = tmp_path / "secrets.enc"
+        names = [f"proc{n}" for n in range(4)]
+        _run_processes([(first_boot_write, (str(path), name)) for name in names])
+        backend = EncryptedFileBackend(path)
+        for name in names:
+            assert backend.get(name) == f"value-{name}"
