@@ -81,6 +81,11 @@ class Secrets:
         else:
             self._backend = self._auto_detect_backend()
 
+    @property
+    def backend(self) -> SecretBackend:
+        """The active backend instance."""
+        return self._backend
+
     def _auto_detect_backend(self) -> SecretBackend:
         """Select the best available backend."""
         if self._settings:

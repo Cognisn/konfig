@@ -18,6 +18,8 @@ Konfig provides three foundational capabilities every Python application needs, 
 - **Layered settings** with system/user/env/runtime precedence and persistent writes
 - **Pluggable secrets** with OS keyring, AES-encrypted file, and AWS Secrets Manager backends
 - **Run-scoped logging** with historical retention, structured JSON mode, and stdio-safe output
+- **Optional centralised log forwarding**: one nominated collector gathers every container's logs
+  over pinned TLS, discovered automatically through the shared secrets store
 - **Platform-aware defaults** for config, data, and log directories (macOS, Linux, Windows)
 - **Optional app lifecycle** via a sync/async context manager — no inheritance required
 - Python 3.10+
@@ -177,6 +179,26 @@ settings.set("debug", True)                                  # omit persist: in-
 host = settings.get("database.host")
 ```
 
+### Centralised log forwarding
+
+To collect every container's logs in one place, nominate one instance as the collector and turn
+on forwarding everywhere else. Each instance keeps its own local logs as before:
+
+```bash
+# On the collector (needs a persistent volume at its log directory)
+KONFIG_LOG_COLLECTOR=true
+KONFIG_LOG_COLLECTOR_ADVERTISE=log-collector:9020
+
+# On every other instance
+KONFIG_LOG_CENTRAL=true
+KONFIG_LOG_INSTANCE_LABEL=worker-3   # optional
+```
+
+`AppContext` does the rest. The collector generates a TLS certificate and an access token and
+publishes them in the shared secrets store, senders discover them, and every record lands, tagged
+with its instance, in `<log_dir>/central/latest/central.log` on the collector. See
+[Centralised Log Forwarding](docs/logging.md#centralised-log-forwarding).
+
 Each subsystem (Settings, Secrets, LogManager) can also be used independently. See the full documentation in the [`docs/`](docs/) directory:
 
 - [Settings Guide](docs/settings.md)
@@ -199,6 +221,7 @@ Working examples are provided in the [`samples/`](samples/) directory:
 | [`app_context.py`](samples/app_context.py) | Full lifecycle with all subsystems |
 | [`async_app.py`](samples/async_app.py) | Async context manager usage |
 | [`custom_backend.py`](samples/custom_backend.py) | Implementing a custom SecretBackend |
+| [`central_logging.py`](samples/central_logging.py) | Centralised log forwarding: collector and sender roles |
 
 ## Development
 

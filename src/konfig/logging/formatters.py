@@ -29,6 +29,10 @@ class JSONFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
+        return json.dumps(self.build_entry(record), default=str)
+
+    def build_entry(self, record: logging.LogRecord) -> dict[str, Any]:
+        """Build the dict serialised for ``record``."""
         entry: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(
                 record.created, tz=timezone.utc
@@ -40,4 +44,21 @@ class JSONFormatter(logging.Formatter):
         }
         if record.exc_info and record.exc_info[1] is not None:
             entry["exception"] = self.formatException(record.exc_info)
-        return json.dumps(entry, default=str)
+        return entry
+
+
+class InstanceJSONFormatter(JSONFormatter):
+    """JSON formatter that adds the centralised logging ``instance`` block.
+
+    Used for local logs only when ``logging.central.include_instance_locally``
+    is enabled.
+    """
+
+    def __init__(self, instance: dict[str, Any]) -> None:
+        super().__init__()
+        self._instance = instance
+
+    def build_entry(self, record: logging.LogRecord) -> dict[str, Any]:
+        entry = super().build_entry(record)
+        entry["instance"] = self._instance
+        return entry
