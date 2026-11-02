@@ -47,6 +47,8 @@ isort --check-only src/ tests/
 mypy src/konfig
 ```
 
+Lock files `requirements/dev.txt` and `requirements/build.txt` come from the `.in` files beside them; regenerate with the `uv pip compile` commands in the README's Development section.
+
 Supported Python is 3.10 to 3.13; CI runs the suite on Linux, macOS and Windows. Run tests and
 commit as separate steps.
 

@@ -233,8 +233,32 @@ Working examples are provided in the [`samples/`](samples/) directory:
 
 ## Development
 
+CI installs the development tools from a hash-locked requirements file and then konfig
+itself. Do the same locally to get exactly the versions CI tests with (the lock covers
+Linux, macOS and Windows on Python 3.10 to 3.13, and includes the `dev` and `aws` extras):
+
 ```bash
-pip install -e ".[dev]"
+python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
+python -m pip install --no-deps --no-build-isolation -e .
+```
+
+`pip install -e ".[dev,aws]"` still works when you do not need the locked versions.
+
+The lock files are generated from the `.in` files beside them, together with
+`pyproject.toml`, by [uv](https://docs.astral.sh/uv/) 0.13.6 (the version CI uses).
+Regenerate them from the repository root after changing a dependency in `pyproject.toml` or
+a `.in` file:
+
+```bash
+uv pip compile --universal --generate-hashes --python-version 3.10 requirements/build.in -o requirements/build.txt
+uv pip compile --universal --generate-hashes --python-version 3.10 pyproject.toml requirements/dev.in --extra dev --extra aws -o requirements/dev.txt
+```
+
+uv keeps the versions already in the lock files; add `--upgrade` (or
+`--upgrade-package <name>`) to move them on. CI regenerates both files and fails if the
+result differs from what is committed.
+
+```bash
 pytest
 pytest --cov=konfig
 mypy src/konfig
