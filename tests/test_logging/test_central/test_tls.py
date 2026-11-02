@@ -171,40 +171,68 @@ class TestStateFiles:
 
 
 class RecordingTLSServer:
-    """A TLS server that records every application byte a client sends."""
+    """A TLS server that records what one client connection did.
+
+    It counts the TCP accept and the server-side handshake outcome, notes the
+    negotiated TLS version and how the connection ended, and keeps every
+    application byte the client sends.
+    """
 
     def __init__(self, state_dir: Path) -> None:
         self.certificate = load_or_create_certificate(
             ensure_private_dir(state_dir), "127.0.0.1"
         )
         self._context = server_context(self.certificate)
+        # A TLS 1.3 server writes its session tickets after the client's side
+        # of the handshake has already finished. A client that hangs up at once,
+        # as the sender must on a pin mismatch, leaves them unread; Windows then
+        # aborts the connection and the server's handshake fails while writing
+        # them. Without tickets the server's handshake ends when it reads the
+        # client's Finished, so its outcome no longer races the client's close.
+        self._context.num_tickets = 0
         self._listener = socket.socket()
         self._listener.bind(("127.0.0.1", 0))
         self._listener.listen()
         self.port = self._listener.getsockname()[1]
         self.received = b""
+        self.accepted = 0
         self.handshakes = 0
+        self.handshake_errors: list[str] = []
+        self.tls_version: str | None = None
+        self.ended: str | None = None  # "eof", or the exception that ended it
         self.closed = threading.Event()
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._thread.start()
 
     def _serve(self) -> None:
-        conn, _ = self._listener.accept()
+        try:
+            conn, _ = self._listener.accept()
+        except OSError:
+            self.closed.set()
+            return
+        self.accepted += 1
         conn.settimeout(10)
         try:
-            with self._context.wrap_socket(conn, server_side=True) as tls:
+            try:
+                tls = self._context.wrap_socket(conn, server_side=True)
+            except (OSError, ssl.SSLError) as exc:
+                self.handshake_errors.append(type(exc).__name__)
+                return
+            with tls:
                 self.handshakes += 1
+                self.tls_version = tls.version()
                 while True:
                     try:
                         chunk = tls.recv(65536)
-                    except (OSError, ssl.SSLError):
+                    except (OSError, ssl.SSLError) as exc:
+                        self.ended = type(exc).__name__
                         break
                     if not chunk:
+                        self.ended = "eof"
                         break
                     self.received += chunk
-        except (OSError, ssl.SSLError):
-            pass
         finally:
+            conn.close()
             self.closed.set()
 
     def close(self) -> None:
@@ -242,7 +270,13 @@ def test_pin_mismatch_closes_before_any_byte(
         log.info("must never be sent")
         assert recording_server.closed.wait(10)
         sender.stop()
-    assert recording_server.handshakes == 1  # TLS completed, then we hung up
+    # One TCP connection, one completed TLS handshake, then the sender hung up
+    # without sending a single application byte.
+    assert recording_server.accepted == 1
+    assert recording_server.handshake_errors == []
+    assert recording_server.handshakes == 1
+    assert recording_server.tls_version in ("TLSv1.2", "TLSv1.3")
+    assert recording_server.ended in ("eof", "ConnectionResetError")
     assert recording_server.received == b""
     assert not sender.connected
     assert "does not match the pinned fingerprint" in caplog.text
