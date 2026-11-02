@@ -24,8 +24,11 @@ session records the need as a Skuld decision or question instead.
 - The single source of truth is `src/konfig/_version.txt`, read dynamically by hatchling and
   by `konfig.__version__`.
 - It is set only by `scripts/bump-version.sh <version>`, on the release branch, by the
-  integration session. The script also rolls `CHANGELOG.md`. Workstream branches never bump
-  the version or create stamp commits.
+  integration session. Workstream branches never bump the version or create stamp commits.
+- The script refuses anything but `MAJOR.MINOR.PATCH` with an optional `aN`, `bN` or `rcN`
+  suffix. A pre-release stamp (`0.5.0a2`, `0.5.0rc1`) sets `_version.txt` only and leaves
+  `CHANGELOG.md` alone, so `[Unreleased]` keeps collecting entries; the final stamp (`0.5.0`)
+  rolls `[Unreleased]` into a dated section and opens a fresh `[Unreleased]`.
 - `main` carries only final versions; pre-releases (`0.5.0a1`, `0.5.0rc1`) live on release
   branches.
 

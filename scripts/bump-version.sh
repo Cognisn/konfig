@@ -5,6 +5,9 @@
 #   scripts/bump-version.sh           Print the current version.
 #   scripts/bump-version.sh 0.2.0     Set version.txt, propagate to manifests,
 #                                      and roll CHANGELOG.md.
+#   scripts/bump-version.sh 0.2.0a1   Pre-release (aN, bN or rcN): set
+#                                      version.txt and propagate, but leave
+#                                      CHANGELOG.md alone for the final roll.
 set -euo pipefail
 
 # Locate the version file. In this repository the source of truth is
@@ -25,6 +28,15 @@ fi
 new="$1"
 today=$(date +%F)
 
+# MAJOR.MINOR.PATCH with an optional PEP 440 pre-release suffix (aN, bN, rcN).
+# Checked before anything is written.
+version_re='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)((a|b|rc)(0|[1-9][0-9]*))?$'
+if ! [[ "${new}" =~ ${version_re} ]]; then
+  echo "invalid version '${new}': expected MAJOR.MINOR.PATCH with an optional aN, bN or rcN suffix (for example 0.5.0 or 0.5.0rc1)" >&2
+  exit 1
+fi
+prerelease="${BASH_REMATCH[4]}"
+
 printf '%s\n' "${new}" > "${version_file}"
 echo "version.txt: ${current} -> ${new}"
 
@@ -42,8 +54,11 @@ fi
 # pyproject configuration applied during onboarding), so nothing to propagate.
 
 # Roll CHANGELOG.md: promote [Unreleased] to a dated section for this version
-# and open a fresh [Unreleased] above it.
-if [ -f CHANGELOG.md ]; then
+# and open a fresh [Unreleased] above it. Pre-releases skip the roll so that
+# [Unreleased] keeps collecting entries until the final version is stamped.
+if [ -n "${prerelease}" ]; then
+  echo "CHANGELOG.md: roll skipped for pre-release ${new}"
+elif [ -f CHANGELOG.md ]; then
   if ! grep -q '^## \[Unreleased\]' CHANGELOG.md; then
     echo "warning: CHANGELOG.md has no [Unreleased] section, leaving it unchanged" >&2
   else
