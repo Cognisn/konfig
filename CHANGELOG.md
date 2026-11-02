@@ -62,6 +62,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Development: a worktree recipe (`dev/worktree.json`) and a Compose override template
   (`dev/worktree-compose.override.yml`) that publishes LocalStack on a loopback port per
   worktree, and a repository `CLAUDE.md` with the project's working conventions.
+- CI also runs on pushes to release and workstream branches and on pull requests to release
+  branches.
+
+### Security
+
+- CI and the PyPI publish workflow install dependencies from hash-locked requirements files
+  (`requirements/dev.txt`, `requirements/build.txt`, generated with
+  `uv pip compile --universal --generate-hashes`) with `--require-hashes --only-binary :all:`,
+  so every run installs the same verified wheels and never builds a dependency from source.
+- The release build runs `python -m build --no-isolation` with the locked build front end and
+  hatchling backend, instead of fetching an unpinned backend at build time.
+- Every GitHub Action in the workflows is pinned to a full commit SHA.
+- A CI job regenerates both lock files, recomputing every hash, and fails when they differ from
+  what is committed.
 
 ## [0.4.0] - 2026-08-16
 

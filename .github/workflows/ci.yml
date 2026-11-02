@@ -2,9 +2,24 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "release/**"
+      - "feat/**"
+      - "fix/**"
+      - "docs/**"
+      - "refactor/**"
+      - "chore/**"
+      - "test/**"
+      - "perf/**"
+      - "build/**"
+      - "ci/**"
+      - "style/**"
+      - "security/**"
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - "release/**"
 
 jobs:
   test:
@@ -16,24 +31,26 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Hash-checked wheels from the lock, then konfig itself with no dependency
+      # resolution and the build backend taken from the lock.
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
+          python -m pip install --no-deps --no-build-isolation -e .
 
       - name: Run tests
         run: pytest --cov=konfig --cov-report=xml -v
 
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5.0.0
         with:
           name: coverage-report
           path: coverage.xml
@@ -42,17 +59,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
         with:
           python-version: "3.12"
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
+          python -m pip install --no-deps --no-build-isolation -e .
 
       - name: Check formatting (black)
         run: black --check src/ tests/
@@ -62,3 +79,28 @@ jobs:
 
       - name: Type checking (mypy)
         run: mypy src/konfig
+
+  lock:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      # The same commands as the headers of the lock files. uv keeps the committed
+      # pins as preferences, but would also carry their hashes over unchecked, so
+      # the hashes are stripped first and recomputed from the index. Any
+      # difference means a lock is stale or was edited by hand.
+      - name: Regenerate the lock files
+        run: |
+          sed -i -e '/^ *--hash=/d' -e 's/ \\$//' requirements/build.txt requirements/dev.txt
+          uv pip compile --universal --generate-hashes --python-version 3.10 requirements/build.in -o requirements/build.txt
+          uv pip compile --universal --generate-hashes --python-version 3.10 pyproject.toml requirements/dev.in --extra dev --extra aws -o requirements/dev.txt
+
+      - name: Fail if the lock files differ from what is committed
+        run: git diff --exit-code -- requirements/
