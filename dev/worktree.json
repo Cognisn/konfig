@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "python": {
+    "version": "3.12",
+    "install": ["-e", ".[dev,aws]"],
+    "import_check": "konfig"
+  },
+  "services": [
+    { "name": "localstack", "offset": 66 }
+  ],
+  "compose_base": ["docker-compose.yml"],
+  "compose_template": "dev/worktree-compose.override.yml",
+  "notes": "LocalStack suite: start the stack with compose_up from ports.txt, set KONFIG_TEST_LOCALSTACK_URL=http://127.0.0.1:<localstack port from ports.txt>, run pytest -m localstack, then stop it with compose_down. A running stack counts as one heavy workload."
+}

@@ -1,0 +1,8 @@
+# Per-worktree override of docker-compose.yml, rendered into the sandbox by the
+# workstation's worktree setup script. Needs Docker Compose 2.24.4 or later for
+# !override. Every published port is bound to 127.0.0.1 inside the slot's block.
+services:
+  localstack:
+    container_name: {{COMPOSE_PROJECT}}-localstack
+    ports: !override
+      - "127.0.0.1:{{PORT_LOCALSTACK}}:4566"
