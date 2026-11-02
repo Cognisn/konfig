@@ -93,7 +93,9 @@ def project(tmp_path: Path) -> Project:
     return Project(tmp_path)
 
 
-def test_no_argument_prints_current_version_and_changes_nothing(project: Project) -> None:
+def test_no_argument_prints_current_version_and_changes_nothing(
+    project: Project,
+) -> None:
     before = project.snapshot()
     result = project.run()
     assert result.returncode == 0, result.stderr
