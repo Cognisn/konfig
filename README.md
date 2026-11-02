@@ -258,6 +258,10 @@ uv keeps the versions already in the lock files; add `--upgrade` (or
 `--upgrade-package <name>`) to move them on. CI regenerates both files and fails if the
 result differs from what is committed.
 
+The GitHub Actions in `.github/workflows/` are pinned to full commit SHAs with the tag as a
+trailing comment; Dependabot (`.github/dependabot.yml`) proposes updates to them weekly, as
+one grouped pull request, and never touches the lock files.
+
 ```bash
 pytest
 pytest --cov=konfig
