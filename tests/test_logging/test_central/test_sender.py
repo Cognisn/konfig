@@ -17,6 +17,7 @@ from tests.test_logging.test_central._helpers import (
     free_port,
     isolated_logger,
     messages,
+    poll_stream,
     read_stream,
     shared_secrets,
     wait_for,
@@ -144,12 +145,13 @@ class TestOverflow:
             log.info("record %d", i)
         assert sender.unsent() == 100
 
-        start_collector()
+        collector = start_collector()
         log_dir = tmp_path / "collector-logs"
         assert wait_for(
-            lambda: len(messages(read_stream(log_dir), "overflow.app")) == 100
+            lambda: len(messages(poll_stream(log_dir), "overflow.app")) == 100
         )
         sender.stop()
+        collector.stop()  # drain and close the stream, so every line is read strictly
         entries = read_stream(log_dir)
         assert messages(entries, "overflow.app") == [
             f"record {i}" for i in range(150, 250)

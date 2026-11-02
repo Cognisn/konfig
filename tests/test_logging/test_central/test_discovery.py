@@ -27,6 +27,7 @@ from tests.test_logging.test_central._helpers import (
     FakeSMClient,
     isolated_logger,
     messages,
+    poll_stream,
     read_stream,
     shared_secrets,
     wait_for,
@@ -213,14 +214,15 @@ class TestDiscovery:
     def test_sender_discovers_via_shared_encrypted_file(
         self, start_collector: StartCollector, store_path: Path, tmp_path: Path
     ) -> None:
-        start_collector()
+        collector = start_collector()
         sender = _discovering_sender(shared_secrets(store_path), "file-sender")
         log = isolated_logger("discovery.file", sender.handler)
         sender.start()
         log.info("via the shared file")
         log_dir = tmp_path / "collector-logs"
-        assert wait_for(lambda: messages(read_stream(log_dir), "discovery.file"))
+        assert wait_for(lambda: messages(poll_stream(log_dir), "discovery.file"))
         sender.stop()
+        collector.stop()  # drain and close the stream, so every line is read strictly
         entry = [e for e in read_stream(log_dir) if e["logger"] == "discovery.file"][0]
         assert entry["instance"]["label"] == "file-sender"
 
@@ -234,7 +236,7 @@ class TestDiscovery:
         assert wait_for(lambda: not sender.connected, 1)
         start_collector()
         log_dir = tmp_path / "collector-logs"
-        assert wait_for(lambda: messages(read_stream(log_dir), "discovery.late"))
+        assert wait_for(lambda: messages(poll_stream(log_dir), "discovery.late"))
         sender.stop()
 
     def test_sender_discovers_via_aws_bundle(
@@ -252,7 +254,7 @@ class TestDiscovery:
         sender.start()
         log.info("via the AWS bundle")
         log_dir = tmp_path / "collector-logs"
-        assert wait_for(lambda: messages(read_stream(log_dir), "discovery.aws"))
+        assert wait_for(lambda: messages(poll_stream(log_dir), "discovery.aws"))
         sender.stop()
 
     def test_sender_rereads_bundle_cache_after_failure(
@@ -282,5 +284,5 @@ class TestDiscovery:
             secrets=Secrets(backend=AWSSecretsBundleBackend(ARN, client=client))
         )
         log_dir = tmp_path / "collector-logs"
-        assert wait_for(lambda: messages(read_stream(log_dir), "discovery.stale"))
+        assert wait_for(lambda: messages(poll_stream(log_dir), "discovery.stale"))
         sender.stop()

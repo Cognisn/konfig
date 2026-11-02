@@ -15,6 +15,7 @@ from tests.test_logging.test_central._helpers import (
     MASTER_KEY,
     free_port,
     messages,
+    poll_stream,
     read_stream,
     wait_for,
 )
@@ -107,7 +108,7 @@ class TestAppContext:
             central = ctx.log_manager.central
             assert central is not None and central.role == "collector"
             logging.getLogger("ctx.app").info("collector app record")
-            assert wait_for(lambda: messages(read_stream(tmp_path / "logs"), "ctx.app"))
+            assert wait_for(lambda: messages(poll_stream(tmp_path / "logs"), "ctx.app"))
             assert ctx.secrets.has("konfig.log_collector")
         entry = [e for e in read_stream(tmp_path / "logs") if e["logger"] == "ctx.app"]
         assert entry[0]["instance"]["app_name"] == "Central App"
