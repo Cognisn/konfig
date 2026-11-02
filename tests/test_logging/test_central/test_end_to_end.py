@@ -18,6 +18,7 @@ from tests.test_logging.test_central._helpers import (
     MASTER_KEY,
     isolated_logger,
     messages,
+    poll_stream,
     read_stream,
     shared_secrets,
     wait_for,
@@ -32,7 +33,7 @@ COUNT = 200
 def test_three_sender_processes(
     start_collector: StartCollector, store_path: Path, tmp_path: Path
 ) -> None:
-    start_collector()
+    collector = start_collector()
     ctx = multiprocessing.get_context("spawn")
     procs = [
         ctx.Process(
@@ -53,11 +54,12 @@ def test_three_sender_processes(
     def arrived() -> int:
         return sum(
             1
-            for e in read_stream(log_dir)
+            for e in poll_stream(log_dir)
             if str(e.get("logger", "")).startswith("e2e.")
         )
 
     assert wait_for(lambda: arrived() >= expected, 20)
+    collector.stop()  # drain and close the stream, so every line is read strictly
     entries = [e for e in read_stream(log_dir) if e["logger"].startswith("e2e.")]
     seen = Counter((e["instance"]["label"], e["message"]) for e in entries)
     for label in LABELS:
@@ -99,7 +101,7 @@ def test_collector_restart_mid_stream(
         for i in range(20):
             log.info("before %d", i)
         assert wait_for(
-            lambda: len(messages(read_stream(log_dir), "restart.app")) == 20
+            lambda: len(messages(poll_stream(log_dir), "restart.app")) == 20
         )
         first.stop()
         for i in range(20):
@@ -110,13 +112,14 @@ def test_collector_restart_mid_stream(
             log.info("after %d", i)
         assert wait_for(
             lambda: all(
-                f"after {i}" in messages(read_stream(log_dir), "restart.app")
+                f"after {i}" in messages(poll_stream(log_dir), "restart.app")
                 for i in range(20)
             ),
             30,
         )
     finally:
         sender.stop()
+    second.stop()
     received = messages(read_stream(log_dir), "restart.app")
     assert len(received) == len(set(received)), "no record arrives twice"
 
@@ -150,7 +153,7 @@ def test_collector_level_independent_of_local_level(
         logging.getLogger("levels.app").debug("debug only centrally")
         logging.getLogger("levels.app").info("info everywhere")
         assert wait_for(
-            lambda: len(messages(read_stream(tmp_path / "logs"), "levels.app")) == 2
+            lambda: len(messages(poll_stream(tmp_path / "logs"), "levels.app")) == 2
         )
     finally:
         manager.shutdown()
