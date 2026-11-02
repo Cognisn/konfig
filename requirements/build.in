@@ -1,0 +1,4 @@
+# Build front end and backend for publish.yml (python -m build --no-isolation).
+# The backend must satisfy [build-system] requires in pyproject.toml.
+build
+hatchling
