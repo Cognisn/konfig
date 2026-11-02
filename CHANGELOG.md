@@ -54,6 +54,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - `Secrets.backend` property exposing the active backend, and `LogManager` properties `log_dir`,
   `app_id`, `app_name`, `version`, `handlers` and `central`.
 
+### Changed
+
+- The opt-in LocalStack integration tests read their endpoint from `KONFIG_TEST_LOCALSTACK_URL`
+  (default `http://127.0.0.1:4566`, so a plain `docker compose up -d` still works), letting them
+  run against LocalStack published on another port.
+- Development: a worktree recipe (`dev/worktree.json`) and a Compose override template
+  (`dev/worktree-compose.override.yml`) that publishes LocalStack on a loopback port per
+  worktree, and a repository `CLAUDE.md` with the project's working conventions.
+
 ## [0.4.0] - 2026-08-16
 
 ### Added

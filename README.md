@@ -135,6 +135,14 @@ pytest -m localstack         # run only the integration test
 docker compose down          # stop LocalStack
 ```
 
+The tests look for LocalStack at `http://127.0.0.1:4566`, the port `docker-compose.yml`
+publishes. If it is published somewhere else, point the tests at it with
+`KONFIG_TEST_LOCALSTACK_URL` (an http(s) URL with a host and a port):
+
+```bash
+KONFIG_TEST_LOCALSTACK_URL=http://127.0.0.1:24566 pytest -m localstack
+```
+
 ## Quick Start
 
 ```python

@@ -1,7 +1,8 @@
 """Opt-in LocalStack integration tests for the AWS Secrets Manager bundle backend.
 
-Auto-skips unless boto3 is installed AND a LocalStack container is reachable on
-localhost:4566. Run explicitly with: pytest -m localstack
+Auto-skips unless boto3 is installed AND a LocalStack container is reachable at
+the endpoint from KONFIG_TEST_LOCALSTACK_URL (default http://127.0.0.1:4566, the
+port docker-compose.yml publishes). Run explicitly with: pytest -m localstack
 Start LocalStack first with: docker compose up -d
 """
 
@@ -18,10 +19,12 @@ import pytest
 boto3 = pytest.importorskip("boto3")
 
 from konfig import Secrets
+from tests.integration._localstack import resolve_endpoint
 
-LOCALSTACK_HOST = "127.0.0.1"
-LOCALSTACK_PORT = 4566
-ENDPOINT_URL = f"http://{LOCALSTACK_HOST}:{LOCALSTACK_PORT}"
+_ENDPOINT = resolve_endpoint()
+LOCALSTACK_HOST = _ENDPOINT.host
+LOCALSTACK_PORT = _ENDPOINT.port
+ENDPOINT_URL = _ENDPOINT.url
 REGION = "us-east-1"
 
 
@@ -39,7 +42,10 @@ pytestmark = [
     pytest.mark.localstack,
     pytest.mark.skipif(
         not _localstack_reachable(),
-        reason=f"LocalStack not reachable at {ENDPOINT_URL} (start it with `docker compose up -d`)",
+        reason=(
+            f"LocalStack not reachable at {ENDPOINT_URL} (start it with "
+            "`docker compose up -d`, or set KONFIG_TEST_LOCALSTACK_URL)"
+        ),
     ),
 ]
 
