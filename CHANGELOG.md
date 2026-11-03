@@ -51,6 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
     reported centrally.
   - `AppContext` starts and stops it automatically; `LogManager.start_central_logging()` and
     `stop_central_logging()` do the same for applications that compose the parts themselves.
+  - The central stream rotates safely on Windows while another program has `central.log` open:
+    the file is copied to `central.log.1` and truncated in place, so no record or backup is lost.
 - `Secrets.backend` property exposing the active backend, and `LogManager` properties `log_dir`,
   `app_id`, `app_name`, `version`, `handlers` and `central`.
 
