@@ -12,6 +12,8 @@ import asyncio
 import hmac
 import json
 import logging
+import os
+import shutil
 import socket
 import ssl
 import threading
@@ -54,6 +56,7 @@ logger = logging.getLogger(__name__)
 CENTRAL_DIR = "central"
 STATE_DIR = "state"
 STREAM_FILE = "central.log"
+ROTATING_SUFFIX = ".rotating"
 WRITER_QUEUE_SIZE = 100_000
 START_TIMEOUT = 10.0
 STOP_TIMEOUT = 5.0
@@ -69,13 +72,76 @@ def format_endpoint(host: str, port: int) -> str:
     return f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
 
 
+class CentralRotatingFileHandler(RotatingFileHandler):
+    """A RotatingFileHandler whose rollover never loses a backup or a record.
+
+    The standard rollover shifts the backups and then renames the live file.
+    On Windows that rename fails while another program holds the file open
+    without share-delete, and every later record retries it: those records
+    are lost and each attempt shifts the backups one place, so earlier ones
+    fall off the end. Here the live file is moved aside first and the backups
+    are shifted only once that has worked. If the move is refused, the file is
+    copied into place as ``.1`` and truncated in place, with one warning.
+
+    The aside name (``<file>.rotating``) exists only during a rollover. Each
+    collector run writes to its own directory, so a leftover from a crash
+    mid-rollover is never overwritten by a later run.
+    """
+
+    def doRollover(self) -> None:
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+        if self.backupCount > 0 and os.path.exists(self.baseFilename):
+            self._roll(self.baseFilename, self.baseFilename + ROTATING_SUFFIX)
+        if not self.delay:
+            self.stream = self._open()
+
+    def _backup(self, n: int) -> str:
+        return self.rotation_filename(f"{self.baseFilename}.{n}")
+
+    def _roll(self, source: str, aside: str) -> None:
+        try:
+            os.replace(source, aside)
+        except PermissionError as exc:
+            self._copy_and_truncate(source, aside, exc)
+            return
+        try:
+            self._shift_into_place(aside)
+        except BaseException:
+            os.replace(aside, source)  # nothing rotated, so nothing is lost
+            raise
+
+    def _copy_and_truncate(self, source: str, aside: str, exc: OSError) -> None:
+        shutil.copyfile(source, aside)  # if this fails, no backup has moved
+        try:
+            self._shift_into_place(aside)
+        except BaseException:
+            os.remove(aside)
+            raise
+        os.truncate(source, 0)
+        logger.warning(
+            "Could not move %s aside to rotate it (%s; another program probably has "
+            "it open), so it was copied to %s and truncated in place",
+            source,
+            exc.strerror or type(exc).__name__,
+            self._backup(1),
+        )
+
+    def _shift_into_place(self, aside: str) -> None:
+        for n in range(self.backupCount - 1, 0, -1):
+            if os.path.exists(self._backup(n)):
+                os.replace(self._backup(n), self._backup(n + 1))
+        os.replace(aside, self._backup(1))
+
+
 class CentralWriter:
     """The single writer of the central stream, fed by a non-blocking queue."""
 
     def __init__(self, path: Path, max_bytes: int, backup_count: int) -> None:
         self._path = path
         self._queue = DropOldestQueue(WRITER_QUEUE_SIZE)
-        self._handler = RotatingFileHandler(
+        self._handler = CentralRotatingFileHandler(
             path, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
         )
         self._handler.setFormatter(logging.Formatter("%(message)s"))

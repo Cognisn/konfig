@@ -4,13 +4,12 @@ Every record the writer is given is counted against every record in the stream
 files. A plain reader (``open()``, as a tail or simple log shipper would use)
 and a reader that opens with share-delete are compared with no reader at all.
 
-On POSIX a rename never cares about other open handles, so every case must keep
-every record. On Windows a handle opened without ``FILE_SHARE_DELETE`` makes
-the rename of central.log fail with WinError 32; RotatingFileHandler has then
-already closed its stream, so each later record reopens the oversized file,
-retries the rollover, fails again and is handed to ``handleError``. Each failed
-attempt also shifts the existing backups one place, so earlier backups fall off
-the end. That case is an expected failure on Windows until a fix lands.
+Every case must keep every record on every platform. On POSIX a rename never
+cares about other open handles. On Windows a handle opened without
+``FILE_SHARE_DELETE`` makes the rename of central.log fail with WinError 32;
+the standard RotatingFileHandler then lost every record written while the
+reader was open and shifted earlier backups off the end. CentralWriter's
+rollover copies central.log to ``.1`` and truncates it in place instead.
 """
 
 from __future__ import annotations
@@ -22,8 +21,6 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import IO, Any
-
-import pytest
 
 from konfig.logging.central.collector import STREAM_FILE, CentralWriter
 from konfig.logging.central.config import CentralLogConfig
@@ -169,16 +166,6 @@ def test_rotation_with_a_share_delete_reader_keeps_every_record(
     assert_every_record_kept(given, found)
 
 
-@pytest.mark.xfail(
-    WINDOWS,
-    reason=(
-        "Windows: a reader without FILE_SHARE_DELETE makes the rename of central.log "
-        "fail (WinError 32); every record written while it is open is lost and the "
-        "failed rollovers push earlier backups off the end"
-    ),
-    raises=AssertionError,
-    strict=True,
-)
 def test_rotation_with_a_plain_reader_keeps_every_record(tmp_path: Path) -> None:
     given, found = rotate_with_reader(tmp_path / "central" / "run-1", "plain")
     assert_every_record_kept(given, found)
