@@ -20,6 +20,7 @@ from konfig.logging.central.tlsutil import client_context, fingerprint_matches
 from tests.test_logging.test_central._helpers import (
     isolated_logger,
     messages,
+    poll_stream,
     read_stream,
     shared_secrets,
     wait_for,
@@ -210,8 +211,9 @@ class TestCentralStream:
         client.send(encode_frame({"type": "log", "records": [record, "not a dict"]}))
         client.send(encode_frame({"type": "dropped", "count": 7}))
         log_dir = tmp_path / "collector-logs"
-        assert wait_for(lambda: len(read_stream(log_dir)) >= 2, 10)
+        assert wait_for(lambda: len(poll_stream(log_dir)) >= 2, 10)
         client.close()
+        collector.stop()  # drain and close the stream, so every line is read strictly
         entries = read_stream(log_dir)
         received = [e for e in entries if e.get("logger") == "x"][0]
         assert received["message"] == "m"
@@ -230,7 +232,8 @@ class TestCentralStream:
         log.info("from the collector itself")
         log.debug("below the forwarded level")
         log_dir = tmp_path / "collector-logs"
-        assert wait_for(lambda: messages(read_stream(log_dir), "collector.app"), 10)
+        assert wait_for(lambda: messages(poll_stream(log_dir), "collector.app"), 10)
+        collector.stop()
         entries = [e for e in read_stream(log_dir) if e["logger"] == "collector.app"]
         assert [e["message"] for e in entries] == ["from the collector itself"]
         assert entries[0]["instance"]["label"] == "collector"
@@ -292,9 +295,10 @@ class TestCentralStream:
         client.send(encode_frame({"type": "log", "records": [{"logger": "big"}]}))
         log_dir = tmp_path / "collector-logs"
         assert wait_for(
-            lambda: any(e.get("logger") == "big" for e in read_stream(log_dir))
+            lambda: any(e.get("logger") == "big" for e in poll_stream(log_dir))
         )
         client.close()
+        collector.stop()
         entry = [e for e in read_stream(log_dir) if e.get("logger") == "big"][0]
         assert entry["instance"]["label"] == "big\nlabel"
         assert entry["instance"]["truncated"] is True
