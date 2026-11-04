@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-04
+
 ### Fixed
 
 - Encrypted file backend is now safe to share between processes and containers on a shared
