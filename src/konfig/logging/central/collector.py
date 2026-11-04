@@ -434,12 +434,18 @@ class CentralCollector:
     def _thread_main(self, host: str, port: int, context: ssl.SSLContext) -> None:
         try:
             asyncio.run(self._serve(host, port, context))
-        except BaseException as exc:  # pragma: no cover - defensive
+        except Exception as exc:
             if not self._ready.is_set():
                 self._start_error = exc
                 self._ready.set()
             else:
                 logger.exception("Log collector listener failed")
+        except BaseException as exc:
+            # Never leave start() waiting, but let an interrupt or exit through.
+            if not self._ready.is_set():
+                self._start_error = exc
+                self._ready.set()
+            raise
 
     async def _serve(self, host: str, port: int, context: ssl.SSLContext) -> None:
         self._loop = asyncio.get_running_loop()
@@ -453,10 +459,14 @@ class CentralCollector:
                 ssl_handshake_timeout=self._config.handshake_timeout,
                 limit=MAX_FRAME_BYTES,
             )
-        except BaseException as exc:
+        except Exception as exc:
             self._start_error = exc
             self._ready.set()
             return
+        except BaseException as exc:
+            self._start_error = exc
+            self._ready.set()
+            raise
         self._port = int(server.sockets[0].getsockname()[1])
         self._ready.set()
         try:
@@ -479,7 +489,7 @@ class CentralCollector:
         try:
             writer.write(encode_frame(message))
             await asyncio.wait_for(writer.drain(), self._config.handshake_timeout)
-        except (OSError, asyncio.TimeoutError, ssl.SSLError):
+        except (OSError, asyncio.TimeoutError):  # ssl.SSLError is an OSError
             pass
 
     async def _read(self, reader: asyncio.StreamReader, timeout: float) -> bytes:
@@ -554,9 +564,7 @@ class CentralCollector:
             )
         except ProtocolError as exc:
             logger.warning("Dropped sender %s: %s", peer, exc)
-        except asyncio.CancelledError:
-            pass  # the collector is stopping
-        except (ConnectionError, ssl.SSLError, OSError) as exc:
+        except OSError as exc:  # includes ConnectionError and ssl.SSLError
             logger.debug("Connection from %s failed: %s", peer, type(exc).__name__)
         finally:
             if task is not None:
