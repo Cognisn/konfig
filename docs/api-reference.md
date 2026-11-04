@@ -102,6 +102,13 @@ Check if a secret exists.
 
 List all stored secret keys.
 
+#### `refresh() -> None`
+
+Make the next read see the active backend's current data by delegating to the backend's
+`refresh()`. For the encrypted file backend this reloads the file under a shared lock, which
+also forces NFS clients (including Amazon EFS) to revalidate; for the AWS bundle backend it
+drops the TTL cache. A no-op for backends that do not cache.
+
 #### `resolve_uri(value) -> str | None`
 
 Resolve a `secret://` URI to its actual value. Non-secret strings pass through unchanged.
@@ -110,6 +117,12 @@ Resolve a `secret://` URI to its actual value. Non-secret strings pass through u
 secrets.resolve_uri("secret://api_key")  # Returns the secret value
 secrets.resolve_uri("plain_value")       # Returns "plain_value"
 ```
+
+### Properties
+
+#### `backend -> SecretBackend`
+
+The active backend instance.
 
 ---
 
@@ -144,15 +157,90 @@ Create a LogManager configured from a Settings instance.
 
 Set up logging: create run directory, configure handlers, log startup banner. Returns the root logger.
 
+#### `start_central_logging(settings, secrets=None, *, environ=None) -> bool`
+
+Start [centralised log forwarding](logging.md#centralised-log-forwarding) in the role selected by
+`logging.central.*` or the `KONFIG_LOG_*` environment variables. Call after `setup()`; `AppContext`
+does this automatically. Returns `True` when this instance is now forwarding or collecting, and
+`False` when the feature is off, misconfigured or failed to start. Never raises: failures are
+logged locally and the application carries on. Calling it again while running is a no-op.
+
+- **settings** (`Settings`): the application's settings.
+- **secrets** (`Secrets`, optional): used to publish (collector) or discover (sender) the collector
+  entry, and to resolve a `secret://` token.
+- **environ** (mapping, optional): environment to read instead of `os.environ`.
+
+#### `stop_central_logging() -> None`
+
+Stop forwarding or collecting. A sender drains its queue for up to `logging.central.flush_timeout`
+seconds and logs how many records were left unsent. A no-op when not running.
+
 #### `shutdown() -> None`
 
-Close and remove all handlers added by this manager.
+Stop centralised log forwarding if it is running, then close and remove all handlers added by this
+manager.
 
 ### Properties
 
 #### `run_dir -> Path | None`
 
 Path to the current run's log directory. `None` before `setup()` is called.
+
+#### `log_dir -> Path`
+
+Base directory holding the run-scoped log directories.
+
+#### `app_id -> str`, `app_name -> str`, `version -> str`
+
+Application details used for default paths and the startup banner.
+
+#### `handlers -> tuple[logging.Handler, ...]`
+
+The handlers this manager attached to the root logger.
+
+#### `central -> CentralLogging | None`
+
+The running centralised logging role, if any.
+
+---
+
+## konfig.logging.central
+
+```python
+from konfig.logging.central import (
+    CentralLogConfig, CentralLogging, resolve_config,
+    start_central_logging, stop_central_logging,
+)
+```
+
+#### `resolve_config(settings=None, environ=None) -> CentralLogConfig`
+
+Resolve `logging.central.*` settings and `KONFIG_LOG_*` environment variables into a frozen
+`CentralLogConfig`. Environment variables win. A partial endpoint/fingerprint/token override is
+reported in `override_error` rather than mixed with other sources.
+
+#### `start_central_logging(log_manager, settings, secrets=None, *, environ=None) -> CentralLogging | None`
+
+The function behind `LogManager.start_central_logging`. Returns a handle, or `None` when the feature
+is off or could not start. Never raises.
+
+#### `stop_central_logging(handle) -> None`
+
+Stop a handle (`None` is ignored).
+
+#### `CentralLogging`
+
+- `role -> str`: `"collector"` or `"sender"`.
+- `config -> CentralLogConfig`
+- `stop() -> None`: stop the role, restoring any logging levels and formatters it changed. Safe
+  to call more than once.
+
+#### `CentralLogConfig`
+
+A frozen dataclass with one field per `logging.central.*` setting (see the
+[Configuration Reference](configuration-reference.md#centralised-log-forwarding)), plus
+`override_source`, `override_error` and the properties `active` and `has_override`. `token` is
+left out of its `repr`.
 
 ---
 
@@ -199,6 +287,13 @@ Abstract interface for secret storage backends.
 #### `has(key) -> bool`
 #### `list_keys() -> list[str]`
 
+### Methods
+
+#### `refresh() -> None`
+
+Discard any cached state so the next read sees the store's current data. Concrete and a
+no-op by default, so existing backends need no change; override it in backends that cache.
+
 ---
 
 ## konfig.secrets.EncryptedFileBackend
@@ -207,12 +302,28 @@ Abstract interface for secret storage backends.
 class EncryptedFileBackend(
     file_path: Path | str,
     master_key: str | None = None,
+    lock_timeout: float = 30.0,
 )
 ```
 
-AES-256 encrypted JSON file backend. Implements `SecretBackend`.
+AES-256 encrypted JSON file backend. Implements `SecretBackend`. Safe to share between
+processes and containers; see [Sharing an encrypted file](secrets.md#sharing-an-encrypted-file-between-processes-and-containers).
 
-Master key resolution: explicit parameter -> `KONFIG_MASTER_KEY` env var -> auto-generated `.key` file.
+Master key resolution: explicit parameter -> `KONFIG_MASTER_KEY` env var -> existing `.key`
+file -> auto-generated `.key` file (only when the secrets file does not exist yet; otherwise
+`MasterKeyMissingError`).
+
+- `lock_timeout`: seconds to wait for the `<file_path>.lock` lock before raising `TimeoutError`.
+  Set from `secrets.file_lock_timeout` when created by `Secrets`.
+- `refresh()`: unconditionally reload the file under a shared lock.
+
+Errors (from `konfig.secrets`, all subclasses of `EncryptedFileError`):
+
+| Error | Raised when |
+|-------|-------------|
+| `MasterKeyMissingError` | No master key is available for an existing, non-empty secrets file |
+| `MasterKeyMismatchError` | The master key does not match the file (also an `InvalidToken`) |
+| `SecretsFileCorruptError` | The file is damaged, truncated or an unknown format version (also an `InvalidToken`) |
 
 ---
 

@@ -1,0 +1,7 @@
+# Development set. konfig's runtime dependencies and the dev and aws extras come
+# from pyproject.toml (compiled together with this file). The editable install of
+# konfig itself (pip install --no-deps --no-build-isolation -e .) runs the build
+# backend from this environment, so it needs hatchling, and editables, which
+# hatchling imports for an editable build of the src/ layout.
+hatchling
+editables

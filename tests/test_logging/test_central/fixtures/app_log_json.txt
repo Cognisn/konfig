@@ -1,0 +1,12 @@
+{"timestamp": "<TS>", "level": "INFO", "logger": "konfig", "message": "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", "pid": <PID>}
+{"timestamp": "<TS>", "level": "INFO", "logger": "konfig", "message": "App:       Regression App", "pid": <PID>}
+{"timestamp": "<TS>", "level": "INFO", "logger": "konfig", "message": "Version:   9.9.9", "pid": <PID>}
+{"timestamp": "<TS>", "level": "INFO", "logger": "konfig", "message": "PID:       <PID>", "pid": <PID>}
+{"timestamp": "<TS>", "level": "INFO", "logger": "konfig", "message": "Platform:  <PLATFORM>", "pid": <PID>}
+{"timestamp": "<TS>", "level": "INFO", "logger": "konfig", "message": "Python:    <PYTHON>", "pid": <PID>}
+{"timestamp": "<TS>", "level": "INFO", "logger": "konfig", "message": "Log Dir:   <TMP>/logs/<RUN>", "pid": <PID>}
+{"timestamp": "<TS>", "level": "INFO", "logger": "konfig", "message": "Log Level: INFO", "pid": <PID>}
+{"timestamp": "<TS>", "level": "INFO", "logger": "konfig", "message": "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", "pid": <PID>}
+{"timestamp": "<TS>", "level": "INFO", "logger": "regression.app", "message": "Plain message 42", "pid": <PID>}
+{"timestamp": "<TS>", "level": "WARNING", "logger": "regression.app", "message": "A warning", "pid": <PID>}
+{"timestamp": "<TS>", "level": "ERROR", "logger": "regression.app", "message": "Something failed", "pid": <PID>, "exception": "Traceback (most recent call last):\n  File <FILE>, line <N>, in capture_app_log\n    raise ValueError(\"boom\")\nValueError: boom"}

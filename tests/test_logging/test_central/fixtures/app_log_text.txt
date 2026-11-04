@@ -1,0 +1,16 @@
+<TS> INFO  [konfig] ──────────────────────────────────
+<TS> INFO  [konfig] App:       Regression App
+<TS> INFO  [konfig] Version:   9.9.9
+<TS> INFO  [konfig] PID:       <PID>
+<TS> INFO  [konfig] Platform:  <PLATFORM>
+<TS> INFO  [konfig] Python:    <PYTHON>
+<TS> INFO  [konfig] Log Dir:   <TMP>/logs/<RUN>
+<TS> INFO  [konfig] Log Level: INFO
+<TS> INFO  [konfig] ──────────────────────────────────
+<TS> INFO  [regression.app] Plain message 42
+<TS> WARNING [regression.app] A warning
+<TS> ERROR [regression.app] Something failed
+Traceback (most recent call last):
+  File <FILE>, line <N>, in capture_app_log
+    raise ValueError("boom")
+ValueError: boom

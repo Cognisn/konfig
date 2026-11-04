@@ -32,3 +32,11 @@ class SecretBackend(ABC):
     def list_keys(self) -> list[str]:
         """List all stored secret keys."""
         ...
+
+    def refresh(self) -> None:
+        """Discard any cached state so the next read sees the store's current data.
+
+        The default implementation does nothing, which suits backends that
+        read through to their store on every call. Backends that cache
+        (for example the encrypted file and AWS bundle backends) override it.
+        """
