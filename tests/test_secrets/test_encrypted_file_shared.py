@@ -11,6 +11,7 @@ import os
 import stat
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -314,3 +315,39 @@ class TestMasterKeyHandling:
         backend = EncryptedFileBackend(path)
         for name in names:
             assert backend.get(name) == f"value-{name}"
+
+    def test_key_file_still_being_written_is_never_read(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The first-boot process holds the lock while the key file exists but
+        # is still empty; a second process must wait for the finished key.
+        monkeypatch.delenv("KONFIG_MASTER_KEY", raising=False)
+        path = tmp_path / "secrets.enc"
+        key_file = path.with_suffix(".key")
+        generated = "first-boot-generated-key"
+        ctx = multiprocessing.get_context("spawn")
+        ready, release = ctx.Event(), ctx.Event()
+        proc = ctx.Process(
+            target=hold_exclusive_lock,
+            args=(str(tmp_path / "secrets.enc.lock"), ready, release),
+        )
+        proc.start()
+
+        def finish_writing() -> None:
+            time.sleep(1.0)
+            key_file.write_text(generated, encoding="utf-8")
+            release.set()
+
+        writer = threading.Thread(target=finish_writing)
+        try:
+            assert ready.wait(60), "child process never acquired the lock"
+            os.close(os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+            writer.start()
+            EncryptedFileBackend(path).set("key", "value")
+        finally:
+            release.set()
+            if writer.is_alive():
+                writer.join(60)
+            proc.join(60)
+        assert proc.exitcode == 0
+        assert EncryptedFileBackend(path, master_key=generated).get("key") == "value"

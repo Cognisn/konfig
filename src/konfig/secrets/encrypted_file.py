@@ -186,11 +186,10 @@ class EncryptedFileBackend(SecretBackend):
             return env_key
 
         key_file = self._path.with_suffix(".key")
-        if key_file.exists():
-            return self._read_key_file(key_file)
 
-        # Decide and generate under the exclusive lock, so processes racing
-        # on first boot settle on a single key file.
+        # Read, decide and generate under the exclusive lock, so processes
+        # racing on first boot settle on a single key file, and never read
+        # one that the generating process has created but not yet written.
         with self._lock.exclusive():
             if key_file.exists():
                 return self._read_key_file(key_file)
