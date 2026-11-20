@@ -6,7 +6,7 @@ its own rules; process common to every project (branching, worktrees, commits, s
 comes from the developer's global working agreement.
 
 # Project configuration
-- Kvasir library: konfig
+- Kvasir library: devwork (tag project-konfig); fallback: konfig
 - Issue tracker: github (issues on Cognisn/konfig); releases, waves and workstreams are tracked in Skuld, project konfig
 - GitHub repository: Cognisn/konfig
 - Default branch: main
