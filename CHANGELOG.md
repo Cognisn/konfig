@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-20
+
+### Fixed
+
+- Sequential writes from one process to an AWS bundle secret no longer lose earlier keys when
+  Secrets Manager returns an older version of the secret. The bundle backend remembers the
+  versions it has read and written, re-reads (up to five times over 3.1 seconds) when Secrets
+  Manager returns one it has already seen superseded, and raises `StaleBundleError` without
+  writing if the old version persists; reads after `refresh()` never go back either. `set()` and
+  `delete()` are serialised by a lock within one backend, and every put carries a
+  `ClientRequestToken`. Writers in different processes are still not coordinated (see the README).
+
 ## [0.5.0] - 2026-11-04
 
 ### Fixed
