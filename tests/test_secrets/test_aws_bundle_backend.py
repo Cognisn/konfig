@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import itertools
 import json
+import threading
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -264,3 +267,101 @@ class TestSeedIfEmpty:
         with caplog.at_level("WARNING", logger="konfig.secrets.aws_bundle_backend"):
             assert backend.seed_if_empty(self.NAMES, "CHANGEME") is False
         assert any("Could not seed" in r.message for r in caplog.records)
+
+
+class VersionedFakeSMClient:
+    """Stand-in for a boto3 secretsmanager client that keeps a version history.
+
+    Every put creates a version whose VersionId is the request's
+    ClientRequestToken (as Secrets Manager does) or a generated id. Reads
+    return AWSCURRENT unless a stale read has been scripted with
+    ``stale_reads``: each entry names the version the next read returns,
+    which is how Secrets Manager's eventual consistency shows itself.
+    """
+
+    def __init__(self, bundle: dict[str, str], version_id: str = "A") -> None:
+        self.versions: dict[str, str] = {version_id: json.dumps(bundle)}
+        self.current = version_id
+        self.stale_reads: list[str] = []
+        self.always_stale: str | None = None
+        self.get_calls = 0
+        self.max_get_calls = 50  # fail fast rather than hang on an unbounded retry
+        self.put_calls: list[dict[str, Any]] = []
+        self.exceptions = SimpleNamespace(ResourceNotFoundException=_ResourceNotFound)
+        self._ids = itertools.count(1)
+        self._mutex = threading.Lock()
+
+    def get_secret_value(self, SecretId: str) -> dict[str, Any]:
+        with self._mutex:
+            self.get_calls += 1
+            assert self.get_calls <= self.max_get_calls, "unbounded re-fetching"
+            if self.stale_reads:
+                version = self.stale_reads.pop(0)
+            elif self.always_stale is not None:
+                version = self.always_stale
+            else:
+                version = self.current
+            return {
+                "SecretString": self.versions[version],
+                "VersionId": version,
+                "VersionStages": ["AWSCURRENT"],
+            }
+
+    def put_secret_value(
+        self, SecretId: str, SecretString: str, ClientRequestToken: str | None = None
+    ) -> dict[str, Any]:
+        with self._mutex:
+            self.put_calls.append(
+                {"SecretString": SecretString, "ClientRequestToken": ClientRequestToken}
+            )
+            version = ClientRequestToken or f"generated-{next(self._ids)}"
+            if version in self.versions:
+                # Secrets Manager ignores a repeated token with the same value.
+                assert self.versions[version] == SecretString
+                return {"VersionId": version, "VersionStages": ["AWSCURRENT"]}
+            self.versions[version] = SecretString
+            self.current = version
+            return {"VersionId": version, "VersionStages": ["AWSCURRENT"]}
+
+    def write_as_other_writer(self, bundle: dict[str, str], version_id: str) -> None:
+        """Another process puts a version this backend has never seen."""
+        self.versions[version_id] = json.dumps(bundle)
+        self.current = version_id
+
+    def bundle(self, version: str | None = None) -> dict[str, str]:
+        return dict(json.loads(self.versions[version or self.current]))
+
+    def last_put(self) -> dict[str, str]:
+        return dict(json.loads(self.put_calls[-1]["SecretString"]))
+
+
+VERSION_A = {"e1": "1", "e2": "2", "e3": "3", "e4": "4"}
+
+
+def _no_sleep_backend(client: VersionedFakeSMClient, **kwargs: Any) -> Any:
+    """A backend whose re-fetch backoff records its delays instead of sleeping."""
+    backend = AWSSecretsBundleBackend(ARN, client=client, **kwargs)
+    slept: list[float] = []
+    backend._sleep = slept.append  # type: ignore[method-assign]
+    return backend, slept
+
+
+class TestSequentialWritesLostUpdate:
+    """Sequential writes from one instance against an eventually consistent store."""
+
+    def test_third_write_built_from_superseded_version_keeps_every_key(self) -> None:
+        # Version A has four entries; key 1 makes B and key 2 makes C. The
+        # third write's fetch returns A again, superseded twice over.
+        client = VersionedFakeSMClient(VERSION_A, version_id="A")
+        backend, _ = _no_sleep_backend(client)
+        backend.set("key1", "v1")
+        backend.set("key2", "v2")
+        client.stale_reads = ["A"]
+        backend.set("key3", "v3")
+        assert client.last_put() == {
+            **VERSION_A,
+            "key1": "v1",
+            "key2": "v2",
+            "key3": "v3",
+        }
+        assert client.bundle() == client.last_put()
