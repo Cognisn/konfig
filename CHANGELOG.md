@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-20
+
 ### Fixed
 
 - Sequential writes from one process to an AWS bundle secret no longer lose earlier keys when
