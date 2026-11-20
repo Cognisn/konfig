@@ -128,7 +128,10 @@ a lock, and the backend never builds a write (or answers a read) from a version
 of the secret it has already seen superseded. Secrets Manager is eventually
 consistent, so a read can briefly return an older version; the backend re-reads
 up to five times over 3.1 seconds and, if the old version persists, raises
-`StaleBundleError` (a `RuntimeError`) without writing. Writers in **different
+`StaleBundleError` (a `RuntimeError`) without writing. A running process takes
+`AWSCURRENT` being moved back to a version it has already seen replaced as such
+a stale read, so restart the processes that use the bundle after rolling it
+back. Writers in **different
 processes** (several replicas, or a person editing the secret while the
 application writes) are not coordinated: two of them writing at the same moment
 can still lose one of the updates, because Secrets Manager offers no
