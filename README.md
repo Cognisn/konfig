@@ -122,6 +122,19 @@ only logs a warning. Concurrent replicas racing the first boot are benign:
 every writer writes identical content. Operators who want no write attempt at
 all can disable seeding outright with `KONFIG_AWS_SEED=false`.
 
+Writes to the bundle secret are whole-bundle read-modify-write. Within one
+process they are safe: `set()` and `delete()` on one backend are serialised by
+a lock, and the backend never builds a write (or answers a read) from a version
+of the secret it has already seen superseded. Secrets Manager is eventually
+consistent, so a read can briefly return an older version; the backend re-reads
+up to five times over 3.1 seconds and, if the old version persists, raises
+`StaleBundleError` (a `RuntimeError`) without writing. Writers in **different
+processes** (several replicas, or a person editing the secret while the
+application writes) are not coordinated: two of them writing at the same moment
+can still lose one of the updates, because Secrets Manager offers no
+compare-and-set. Keep runtime writes to one process, or give each writer its own
+secret.
+
 ### Running the LocalStack integration tests
 
 The AWS integrations have opt-in integration tests that run against a local

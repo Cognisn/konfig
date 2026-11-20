@@ -132,6 +132,30 @@ def test_bundle_backend_full_crud_round_trip(
     assert stored_after == {"db_password": "pw-123"}
 
 
+def test_bundle_backend_sequential_writes_keep_every_key(
+    bundle_arn: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Several writes in quick succession from one process: every key survives
+    # in the stored bundle, each put makes exactly one version, and a fresh
+    # read after refresh() sees them all.
+    monkeypatch.setenv("KONFIG_AWS_SECRETS_MANAGER", bundle_arn)
+    secrets = Secrets()
+    keys = {f"key{i}": f"value-{i}" for i in range(1, 6)}
+    for key, value in keys.items():
+        secrets.set(key, value)
+
+    stored = json.loads(_client().get_secret_value(SecretId=bundle_arn)["SecretString"])
+    assert stored == {"api_key": "sk-seeded", **keys}
+
+    versions = _client().list_secret_version_ids(
+        SecretId=bundle_arn, IncludeDeprecated=True
+    )["Versions"]
+    assert len(versions) == 1 + len(keys)  # the created version plus one per set
+
+    secrets.refresh()
+    assert {key: secrets.get(key) for key in keys} == keys
+
+
 @pytest.fixture
 def settings_arn() -> Iterator[str]:
     """Create a settings-document secret and yield its ARN; delete on teardown."""

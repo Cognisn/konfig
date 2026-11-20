@@ -108,7 +108,9 @@ class FakeSMClient:
     def get_secret_value(self, SecretId: str) -> dict[str, Any]:
         return {"SecretString": self.secret_string}
 
-    def put_secret_value(self, SecretId: str, SecretString: str) -> None:
+    def put_secret_value(
+        self, SecretId: str, SecretString: str, ClientRequestToken: str | None = None
+    ) -> None:
         self.secret_string = SecretString
 
 
